@@ -1,6 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { fetchProfile, addSshKey, deleteSshKey } from '../api';
-import { Key, Plus, Trash2, Shield, Info, Terminal, Settings as SettingsIcon } from 'lucide-react';
+import { 
+  Key, 
+  Plus, 
+  Trash2, 
+  Shield, 
+  Info, 
+  Terminal, 
+  Settings as SettingsIcon,
+  User,
+  Fingerprint,
+  ChevronRight,
+  ShieldCheck,
+  AlertCircle
+} from 'lucide-react';
+import Layout from '../components/Layout';
+import { Button } from '../components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '../components/ui/card';
+import { Input } from '../components/ui/input';
 
 const Settings = () => {
     const [keys, setKeys] = useState([]);
@@ -22,20 +39,12 @@ const Settings = () => {
 
     const handleAddKey = async (e) => {
         e.preventDefault();
-        if (!newKeyValue) {
-            alert("Please enter an SSH key.");
-            return;
-        }
+        if (!newKeyValue) return;
         
         let title = newKeyName.trim();
         if (!title) {
-            // Try to extract comment from key (e.g. ssh-rsa AAA... user@host)
             const parts = newKeyValue.trim().split(' ');
-            if (parts.length >= 3) {
-                title = parts.slice(2).join(' ');
-            } else {
-                title = 'My SSH Key';
-            }
+            title = parts.length >= 3 ? parts.slice(2).join(' ') : 'My SSH Key';
         }
 
         try {
@@ -45,7 +54,6 @@ const Settings = () => {
             await loadProfile();
         } catch (err) {
             console.error("Failed to add key:", err);
-            alert("Failed to add key. Please check the console.");
         }
     };
 
@@ -55,110 +63,142 @@ const Settings = () => {
             await loadProfile();
         } catch (err) {
             console.error("Failed to delete key:", err);
-            alert("Failed to delete key. Please check the console.");
         }
     };
 
     return (
-        <div className="container fade-in" style={{ marginTop: '40px', maxWidth: '900px' }}>
-            <div style={{ display: 'flex', gap: '40px' }}>
-                <div style={{ width: '250px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                        <SettingsIcon size={24} />
-                        <h2 style={{ fontSize: '20px', fontWeight: '600' }}>User Settings</h2>
+        <Layout>
+            <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
+                <div className="flex items-center gap-4 border-b pb-6">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                        <User className="w-8 h-8" />
                     </div>
-                    <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <button className="glass" style={{ textAlign: 'left', padding: '8px 16px', color: '#c9d1d9', border: 'none', background: 'rgba(56, 139, 253, 0.1)' }}>
-                            SSH Keys
-                        </button>
-                        <button style={{ textAlign: 'left', padding: '8px 16px', color: '#8b949e', background: 'none' }}>
-                            Account
-                        </button>
-                    </nav>
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">{username}'s Profile</h1>
+                        <p className="text-muted-foreground text-sm flex items-center gap-2">
+                            Manage your account settings and SSH keys.
+                        </p>
+                    </div>
                 </div>
 
-                <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Key size={20} /> SSH Keys
-                    </h3>
-                    <p style={{ color: '#8b949e', fontSize: '14px', marginBottom: '24px' }}>
-                        SSH keys allow you to securely clone and push to repositories without entering your password every time.
-                    </p>
+                <div className="grid md:grid-cols-[240px_1fr] gap-8">
+                    {/* Sub-nav */}
+                    <nav className="flex flex-col gap-1">
+                        <Button variant="accent" className="justify-start gap-3 bg-accent text-accent-foreground">
+                            <Key className="w-4 h-4" /> SSH Keys
+                        </Button>
+                        <Button variant="ghost" className="justify-start gap-3 text-muted-foreground">
+                            <User className="w-4 h-4" /> Account Settings
+                        </Button>
+                        <Button variant="ghost" className="justify-start gap-3 text-muted-foreground">
+                            <ShieldCheck className="w-4 h-4" /> Security
+                        </Button>
+                    </nav>
 
-                    <div className="card" style={{ marginBottom: '32px' }}>
-                        <h4 style={{ fontWeight: '600', marginBottom: '16px', fontSize: '14px' }}>Add SSH Key</h4>
-                        <form onSubmit={handleAddKey}>
-                            <div style={{ marginBottom: '16px' }}>
-                                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Title</label>
-                                <input 
-                                    type="text" 
-                                    value={newKeyName}
-                                    onChange={(e) => setNewKeyName(e.target.value)}
-                                    placeholder="e.g. My Laptop"
-                                    style={{ width: '100%', background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', padding: '8px', color: '#c9d1d9' }}
-                                />
+                    <div className="space-y-8">
+                        <section className="space-y-4">
+                            <div className="flex flex-col space-y-1">
+                                <h2 className="text-xl font-bold">SSH Keys</h2>
+                                <p className="text-sm text-muted-foreground">
+                                    SSH keys allow you to securely authenticate with Pijul without entering passwords.
+                                </p>
                             </div>
-                            <div style={{ marginBottom: '16px' }}>
-                                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Key</label>
-                                <textarea 
-                                    value={newKeyValue}
-                                    onChange={(e) => setNewKeyValue(e.target.value)}
-                                    placeholder="Begins with 'ssh-rsa', 'ssh-ed25519', etc."
-                                    style={{ width: '100%', height: '100px', background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', padding: '8px', color: '#c9d1d9', fontFamily: 'monospace', fontSize: '12px' }}
-                                />
-                            </div>
-                            <button type="submit" className="btn-primary" style={{ padding: '8px 16px' }}>
-                                <Plus size={16} /> Add SSH Key
-                            </button>
-                        </form>
-                    </div>
 
-                    <div style={{ marginBottom: '40px' }}>
-                        <h4 style={{ fontWeight: '600', marginBottom: '16px', fontSize: '14px' }}>Your Keys</h4>
-                        {keys.length === 0 ? (
-                            <div className="card" style={{ textAlign: 'center', color: '#8b949e', padding: '24px' }}>
-                                You haven't added any SSH keys yet.
-                            </div>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                {keys.map(key => (
-                                    <div key={key.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                            <div style={{ background: '#30363d', padding: '8px', borderRadius: '50%' }}>
-                                                <Key size={16} color="#8b949e" />
-                                            </div>
-                                            <div>
-                                                <div style={{ fontWeight: '600', fontSize: '14px' }}>{key.name}</div>
-                                                <div style={{ fontSize: '12px', color: '#8b949e', fontFamily: 'monospace', marginTop: '2px' }}>
-                                                    {key.key.slice(0, 30)}...
-                                                </div>
-                                            </div>
+                            <Card className="border-border/50">
+                                <form onSubmit={handleAddKey}>
+                                    <CardHeader>
+                                        <CardTitle className="text-base">Add SSH Key</CardTitle>
+                                        <CardDescription>Paste your public key here (e.g. ed25519 or rsa).</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-primary uppercase tracking-wider">Title</label>
+                                            <Input 
+                                                placeholder="e.g. Work Laptop" 
+                                                value={newKeyName}
+                                                onChange={(e) => setNewKeyName(e.target.value)}
+                                            />
                                         </div>
-                                        <button onClick={() => handleDeleteKey(key.id)} style={{ background: 'none', color: '#da3633', padding: '8px' }}>
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-primary uppercase tracking-wider">Public Key</label>
+                                            <textarea 
+                                                className="w-full h-32 bg-background border border-input rounded-md p-3 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                                                placeholder="Begins with 'ssh-rsa' or 'ssh-ed25519'..."
+                                                value={newKeyValue}
+                                                onChange={(e) => setNewKeyValue(e.target.value)}
+                                            />
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter className="bg-muted/30 border-t p-3 flex justify-end">
+                                        <Button type="submit" disabled={!newKeyValue} className="bg-indigo-600 hover:bg-indigo-700 h-8 text-xs">
+                                            <Plus className="w-3 h-3 mr-2" /> Add Key
+                                        </Button>
+                                    </CardFooter>
+                                </form>
+                            </Card>
 
-                    <div className="card" style={{ background: 'rgba(63, 185, 80, 0.05)', borderColor: 'rgba(63, 185, 80, 0.2)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#3fb950', marginBottom: '12px', fontWeight: '600' }}>
-                            <Shield size={18} />
-                            <span>Dynamic SSH Authentication Enabled</span>
-                        </div>
-                        <p style={{ fontSize: '13px', color: '#8b949e', lineHeight: '1.6', marginBottom: '12px' }}>
-                            Your SSH keys are managed dynamically by PijulServ. When you add a key here, it becomes active immediately for all your repositories.
-                        </p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#8b949e' }}>
-                            <Info size={14} color="#58a6ff" />
-                            <span>Administrators: Ensure <code style={{ color: '#c9d1d9' }}>scripts/setup-ssh.sh</code> has been run on the server.</span>
-                        </div>
+                            <div className="space-y-3 pt-4">
+                                <h3 className="text-sm font-bold text-primary px-1">Your Registered Keys</h3>
+                                {keys.length === 0 ? (
+                                    <Card className="border-dashed border-2 bg-transparent">
+                                        <CardContent className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                                            <Fingerprint className="w-8 h-8 mb-2 opacity-20" />
+                                            <p className="text-sm">No SSH keys registered yet.</p>
+                                        </CardContent>
+                                    </Card>
+                                ) : (
+                                    <div className="grid gap-3">
+                                        {keys.map(key => (
+                                            <Card key={key.id} className="border-border/50 hover:bg-accent/20 transition-colors group">
+                                                <div className="p-4 flex items-center justify-between">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-muted-foreground group-hover:text-indigo-400 group-hover:bg-indigo-500/10 transition-colors">
+                                                            <Key className="w-5 h-5" />
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-semibold text-sm">{key.name}</div>
+                                                            <div className="text-[10px] font-mono text-muted-foreground mt-0.5 truncate max-w-[200px] sm:max-w-md">
+                                                                {key.key.slice(0, 60)}...
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="icon" 
+                                                        className="text-muted-foreground hover:text-destructive transition-colors"
+                                                        onClick={() => handleDeleteKey(key.id)}
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </Card>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
+                        <Card className="bg-indigo-500/5 border-indigo-500/20 shadow-none">
+                            <CardContent className="p-4 flex gap-4">
+                                <div className="mt-1">
+                                    <ShieldCheck className="w-5 h-5 text-indigo-400" />
+                                </div>
+                                <div className="space-y-2">
+                                    <h4 className="text-sm font-bold text-indigo-300">Secure Authentication</h4>
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        Your keys are automatically synced across the cluster. New keys are active immediately for both SSH and Web-based operations.
+                                    </p>
+                                    <div className="flex items-center gap-2 text-[10px] text-indigo-400/70 pt-1">
+                                        <AlertCircle className="w-3 h-3" />
+                                        <span>Authentication managed by PijulServ Dynamic Auth Protocol</span>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
             </div>
-        </div>
+        </Layout>
     );
 };
 

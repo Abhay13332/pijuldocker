@@ -87,6 +87,45 @@ const pijul = {
         return runPijul(repoName, `change ${hash}`);
     },
 
+    async getChannels(repoName) {
+        const output = await runPijul(repoName, 'channel');
+        // Pijul channel output lists channels, with current marked by *
+        return output.split('\n')
+            .filter(line => line.trim() !== '')
+            .map(line => ({
+                name: line.replace('* ', '').trim(),
+                isCurrent: line.startsWith('*')
+            }));
+    },
+
+    async switchChannel(repoName, channelName) {
+        return runPijul(repoName, `channel switch ${channelName}`);
+    },
+
+    async forkRepo(sourceRepoName, destRepoName) {
+        const sourcePath = path.join(REPOS_PATH, sourceRepoName);
+        const destPath = path.join(REPOS_PATH, destRepoName);
+        
+        if (!fs.existsSync(sourcePath)) {
+            throw new Error('Source repository not found');
+        }
+        if (fs.existsSync(destPath)) {
+            throw new Error('Destination repository already exists');
+        }
+
+        // Copy everything except possibly some large local-only files if they existed
+        // In Pijul, copying the whole dir is fine for a simple fork
+        fs.cpSync(sourcePath, destPath, { recursive: true });
+        return true;
+    },
+
+    async getDiff(repoName, hash) {
+        // Pijul diff usually compares working copy to current channel
+        // To get a patch diff, 'pijul change <hash>' is actually quite good
+        // as it shows the hunks. Let's provide a raw version and maybe a parsed one later.
+        return runPijul(repoName, `change ${hash}`);
+    },
+
     async deleteRepo(repoName) {
         const fullPath = path.join(REPOS_PATH, repoName);
         if (fs.existsSync(fullPath)) {

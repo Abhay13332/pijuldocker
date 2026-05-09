@@ -1,60 +1,158 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { fetchRepoLog, fetchRepoTree, fetchFileContent, fetchPatchDetail, fetchRepos, addCollaborator, removeCollaborator, deleteRepo } from '../api';
-import { File, Folder, Clock, Code, User, ArrowLeft, Box, Terminal, Lock, Globe, Users, Trash2, Shield, AlertTriangle, Settings } from 'lucide-react';
+import { 
+  fetchRepoLog, 
+  fetchRepoTree, 
+  fetchFileContent, 
+  fetchPatchDetail, 
+  fetchRepos, 
+  addCollaborator, 
+  removeCollaborator, 
+  deleteRepo,
+  fetchChannels,
+  switchChannel,
+  forkRepo
+} from '../api';
+import { 
+  File, 
+  Folder, 
+  Clock, 
+  Code, 
+  User, 
+  ArrowLeft, 
+  Box, 
+  Terminal, 
+  Lock, 
+  Globe, 
+  Users, 
+  Trash2, 
+  Shield, 
+  AlertTriangle, 
+  Settings,
+  GitBranch,
+  GitFork,
+  Copy,
+  ChevronRight,
+  ExternalLink,
+  Search,
+  MoreVertical,
+  History
+} from 'lucide-react';
+import Layout from '../components/Layout';
+import { Button } from '../components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/card';
+import { Input } from '../components/ui/input';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel
+} from '../components/ui/dropdown-menu';
 
 const RepoDetail = () => {
-    const { name } = useParams();
+    const { name, tab: urlTab } = useParams();
     const navigate = useNavigate();
-    const [tab, setTab] = useState('files');
+    const [tab, setTab] = useState(urlTab || 'files');
+
+    useEffect(() => {
+        if (urlTab && urlTab !== tab) {
+            setTab(urlTab);
+        }
+    }, [urlTab]);
+
+    const handleTabChange = (newTab) => {
+        setTab(newTab);
+        navigate(`/repos/${name}/${newTab}`);
+    };
     const [repoMeta, setRepoMeta] = useState(null);
     const [tree, setTree] = useState([]);
     const [log, setLog] = useState([]);
+    const [channels, setChannels] = useState([]);
     const [loading, setLoading] = useState(true);
     const [path, setPath] = useState('');
     const [fileContent, setFileContent] = useState(null);
     const [patchDetail, setPatchDetail] = useState(null);
-    const [newCollab, setNewCollab] = useState('');
-    const [newRole, setNewRole] = useState('developer');
     const [deleteConfirm, setDeleteConfirm] = useState('');
     const [deleteLoading, setDeleteLoading] = useState(false);
+    const [forkLoading, setForkLoading] = useState(false);
+    const [newCollab, setNewCollab] = useState('');
 
     const currentUsername = localStorage.getItem('username');
 
     useEffect(() => {
-        loadRepoMeta();
+        loadRepoData();
     }, [name]);
 
-    const loadRepoMeta = async () => {
-        const data = await fetchRepos();
-        const meta = Array.isArray(data) ? data.find(r => r.name === name) : null;
-        setRepoMeta(meta);
+    const loadRepoData = async () => {
+        setLoading(true);
+        try {
+            const [reposData, channelsData] = await Promise.all([
+                fetchRepos(),
+                fetchChannels(name)
+            ]);
+            const meta = Array.isArray(reposData) ? reposData.find(r => r.name === name) : null;
+            setRepoMeta(meta);
+            setChannels(Array.isArray(channelsData) ? channelsData : []);
+        } catch (err) {
+            console.error('Failed to load repo data:', err);
+        }
+        setLoading(false);
     };
 
     useEffect(() => {
         if (tab === 'patch-detail' || tab === 'settings') return;
-        setLoading(true);
-        if (tab === 'files') {
-            if (path && !path.endsWith('/')) {
-                fetchFileContent(name, path).then(content => {
-                    setFileContent(content);
-                    setLoading(false);
-                });
-            } else {
-                fetchRepoTree(name, path).then(data => {
-                    const filteredData = Array.isArray(data) ? data.filter(item => item !== "No tracked files") : [];
-                    setTree(filteredData);
-                    setFileContent(null);
-                    setLoading(false);
-                });
+        
+        const loadContent = async () => {
+            setLoading(true);
+            try {
+                if (tab === 'files') {
+                    if (path && !path.endsWith('/')) {
+                        const content = await fetchFileContent(name, path);
+                        setFileContent(content);
+                    } else {
+                        const data = await fetchRepoTree(name, path);
+                        const filteredData = Array.isArray(data) ? data.filter(item => item !== "No tracked files") : [];
+                        setTree(filteredData);
+                        setFileContent(null);
+                    }
+                } else if (tab === 'patches') {
+                    const data = await fetchRepoLog(name);
+                    setLog(Array.isArray(data) ? data : []);
+                }
+            } catch (err) {
+                console.error('Error loading content:', err);
             }
-        } else {
-            fetchRepoLog(name).then(data => {
-                setLog(Array.isArray(data) ? data : []);
-                setLoading(false);
-            });
-        }
+            setLoading(false);
+        };
+        
+        loadContent();
     }, [name, tab, path]);
+
+    const handleSwitchChannel = async (channelName) => {
+        setLoading(true);
+        try {
+            await switchChannel(name, channelName);
+            await loadRepoData(); // Refresh metadata and channels
+            setPath(''); // Reset path on channel switch
+        } catch (err) {
+            alert('Failed to switch channel: ' + err.toString());
+        }
+        setLoading(false);
+    };
+
+    const handleFork = async () => {
+        setForkLoading(true);
+        try {
+            const newRepo = await forkRepo(name, name); // Will append -username in backend
+            navigate(`/repos/${newRepo.name}`);
+        } catch (err) {
+            alert('Failed to fork repository: ' + err.toString());
+        }
+        setForkLoading(false);
+    };
 
     const showPatch = async (hash) => {
         setLoading(true);
@@ -68,336 +166,368 @@ const RepoDetail = () => {
         setLoading(false);
     };
 
-    const handleAddCollab = async (e) => {
-        e.preventDefault();
-        if (!newCollab) return;
-        try {
-            const collaborators = await addCollaborator(name, newCollab, newRole);
-            setRepoMeta({ ...repoMeta, collaborators });
-            setNewCollab('');
-        } catch (err) {
-            alert(err.toString());
-        }
-    };
-
-    const handleRemoveCollab = async (username) => {
-        const collaborators = await removeCollaborator(name, username);
-        setRepoMeta({ ...repoMeta, collaborators });
-    };
-
-    const handleDeleteRepo = async () => {
-        if (deleteConfirm !== name) return;
-        setDeleteLoading(true);
-        try {
-            await deleteRepo(name);
-            navigate('/');
-        } catch (err) {
-            alert('Failed to delete repository: ' + err.toString());
-            setDeleteLoading(false);
-        }
-    };
-
     const userRole = repoMeta?.owner === currentUsername ? 'owner' :
                      repoMeta?.collaborators?.find(c => c.username === currentUsername)?.role || 'viewer';
-
     const canManage = ['owner', 'maintainer'].includes(userRole);
+    const currentChannel = channels.find(c => c.isCurrent)?.name || 'main';
+
+    if (!repoMeta && !loading) return (
+        <Layout>
+            <div className="text-center py-20">
+                <h2 className="text-2xl font-bold">Repository not found</h2>
+                <Button asChild className="mt-4" variant="outline">
+                    <Link to="/">Back to Dashboard</Link>
+                </Button>
+            </div>
+        </Layout>
+    );
 
     return (
-        <div className="container fade-in" style={{ marginTop: '24px' }}>
-            <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '20px', marginBottom: '8px' }}>
-                        <Folder size={24} color="#58a6ff" />
-                        <Link to="/" style={{ color: '#58a6ff' }}>root</Link>
-                        <span style={{ color: '#8b949e' }}>/</span>
-                        <span style={{ fontWeight: '600' }}>{name}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className="badge" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: repoMeta?.isPrivate ? '#30363d' : '#238636', color: 'white' }}>
-                            {repoMeta?.isPrivate ? <Lock size={12} /> : <Globe size={12} />}
-                            {repoMeta?.isPrivate ? 'Private' : 'Public'}
-                        </span>
-                        <span style={{ fontSize: '12px', color: '#8b949e' }}>
-                            Owned by <span style={{ color: '#c9d1d9' }}>{repoMeta?.owner || 'unknown'}</span>
-                        </span>
-                    </div>
-                </div>
-                <div className="glass" style={{ padding: '8px 12px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <code style={{ fontSize: '12px', color: '#8b949e' }}>pijul clone {window.location.hostname}:/{name}</code>
-                    <button 
-                        onClick={() => navigator.clipboard.writeText(`pijul clone ${window.location.hostname}:/${name}`)}
-                        style={{ background: '#30363d', padding: '4px 8px', fontSize: '10px', color: '#c9d1d9' }}
-                    >
-                        Copy
-                    </button>
-                </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px', borderBottom: '1px solid #30363d', marginBottom: '16px' }}>
-                <button 
-                    onClick={() => { setTab('files'); setPath(''); setPatchDetail(null); }}
-                    style={{ 
-                        background: 'none', 
-                        padding: '8px 16px', 
-                        color: tab === 'files' ? '#c9d1d9' : '#8b949e',
-                        borderBottom: tab === 'files' ? '2px solid #f78166' : 'none',
-                        borderRadius: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                    }}
-                >
-                    <Code size={16} /> Code
-                </button>
-                <button 
-                    onClick={() => { setTab('patches'); setPatchDetail(null); }}
-                    style={{ 
-                        background: 'none', 
-                        padding: '8px 16px', 
-                        color: (tab === 'patches' || tab === 'patch-detail') ? '#c9d1d9' : '#8b949e',
-                        borderBottom: (tab === 'patches' || tab === 'patch-detail') ? '2px solid #f78166' : 'none',
-                        borderRadius: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                    }}
-                >
-                    <Clock size={16} /> Patches
-                </button>
-                {canManage && (
-                    <button
-                        onClick={() => setTab('settings')}
-                        style={{
-                            background: 'none',
-                            padding: '8px 16px',
-                            color: tab === 'settings' ? '#c9d1d9' : '#8b949e',
-                            borderBottom: tab === 'settings' ? '2px solid #f78166' : 'none',
-                            borderRadius: 0,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                        }}
-                    >
-                        <Settings size={16} /> Settings
-                    </button>
-                )}
-            </div>
-
-            {loading && tab !== 'settings' ? (
-                <div>Loading...</div>
-            ) : tab === 'files' ? (
-                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                    {path && (
-                        <div style={{ padding: '12px 16px', borderBottom: '1px solid #30363d', background: '#161b22' }}>
-                            <button onClick={() => setPath('')} style={{ background: 'none', color: '#58a6ff', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <ArrowLeft size={14} /> Back
-                            </button>
+        <Layout repoName={name} owner={repoMeta?.owner}>
+            <div className="space-y-6">
+                {/* Repo Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                            <Box className="w-6 h-6" />
                         </div>
-                    )}
-                    {fileContent !== null ? (
-                        <pre style={{ padding: '16px', margin: 0, overflowX: 'auto', fontSize: '14px', lineHeight: '1.5' }}>
-                            <code>{fileContent}</code>
-                        </pre>
-                    ) : tree.length === 0 ? (
-                        <div style={{ padding: '60px 20px', textAlign: 'center' }}>
-                            <Box size={48} color="#30363d" style={{ marginBottom: '16px' }} />
-                            <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px' }}>This repository is empty</h3>
-                            <p style={{ color: '#8b949e', marginBottom: '24px', maxWidth: '400px', margin: '0 auto 24px' }}>
-                                Get started by adding files and recording your first patch.
-                            </p>
-                            <div style={{ background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', padding: '16px', textAlign: 'left', maxWidth: '500px', margin: '0 auto' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#58a6ff', marginBottom: '12px', fontSize: '14px' }}>
-                                    <Terminal size={16} />
-                                    <span>Quick Setup</span>
-                                </div>
-                                <code style={{ fontSize: '13px', lineHeight: '1.6', color: '#c9d1d9' }}>
-                                    pijul add README.md<br/>
-                                    pijul record -m "Initial patch"
-                                </code>
-                            </div>
-                        </div>
-                    ) : (
                         <div>
-                            {tree.map(item => (
-                                <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderBottom: '1px solid #30363d' }}>
-                                    <File size={16} color="#8b949e" />
-                                    <button 
-                                        onClick={() => setPath(item)}
-                                        style={{ background: 'none', padding: 0, color: '#c9d1d9', textAlign: 'left' }}
-                                    >
-                                        {item}
-                                    </button>
+                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                                {name}
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase ${
+                                    repoMeta?.isPrivate 
+                                        ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' 
+                                        : 'bg-green-500/10 text-green-400 border-green-500/20'
+                                }`}>
+                                    {repoMeta?.isPrivate ? 'Private' : 'Public'}
+                                </span>
+                            </h1>
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                                Project ID: <span className="font-mono text-[10px]">{repoMeta?.id?.slice(0, 8)}</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={handleFork} disabled={forkLoading || repoMeta?.owner === currentUsername}>
+                            <GitFork className="w-4 h-4 mr-2" />
+                            {forkLoading ? 'Forking...' : 'Fork'}
+                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button className="bg-indigo-600 hover:bg-indigo-700" size="sm">
+                                    <Code className="w-4 h-4 mr-2" />
+                                    Clone
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-80">
+                                <DropdownMenuLabel>Clone with SSH</DropdownMenuLabel>
+                                <div className="p-2">
+                                    <div className="flex items-center gap-2 bg-muted p-2 rounded-md border">
+                                        <code className="text-xs truncate flex-1">
+                                            pijul clone {window.location.hostname}:/{name}
+                                        </code>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul clone ${window.location.hostname}:/${name}`)}>
+                                            <Copy className="w-3 h-3" />
+                                        </Button>
+                                    </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            ) : tab === 'patch-detail' ? (
-                <div>
-                    <button 
-                        onClick={() => setTab('patches')}
-                        style={{ background: 'none', color: '#58a6ff', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    >
-                        <ArrowLeft size={16} /> Back to patches
-                    </button>
-                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                        <div style={{ padding: '12px 16px', borderBottom: '1px solid #30363d', background: '#161b22', fontWeight: '600' }}>
-                            Patch Details
-                        </div>
-                        <pre style={{ padding: '16px', margin: 0, overflowX: 'auto', fontSize: '13px', lineHeight: '1.4', background: '#0d1117' }}>
-                            <code>{patchDetail}</code>
-                        </pre>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
-            ) : tab === 'settings' ? (
-                <div className="fade-in">
-                    {/* Collaborators section */}
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Users size={18} /> Collaborators
-                    </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '40px' }}>
-                        <div>
-                            <p style={{ color: '#8b949e', fontSize: '14px', lineHeight: '1.6', marginBottom: '16px' }}>
-                                Control who has access to this repository and what they can do.
-                            </p>
-                            <div className="card">
-                                <h4 style={{ fontWeight: '600', marginBottom: '16px', fontSize: '14px' }}>Add collaborator</h4>
-                                <form onSubmit={handleAddCollab}>
-                                    <div style={{ marginBottom: '12px' }}>
-                                        <input
-                                            type="text"
-                                            value={newCollab}
-                                            onChange={(e) => setNewCollab(e.target.value)}
-                                            placeholder="Enter username"
-                                            style={{ width: '100%', background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', padding: '8px', color: '#c9d1d9', boxSizing: 'border-box' }}
-                                        />
+
+                {/* Main Tabs */}
+                <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
+                    <TabsList className="bg-transparent border-b rounded-none w-full justify-start h-auto p-0 gap-6">
+                        <TabsTrigger value="files" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent px-1 py-2 h-auto">
+                            <Code className="w-4 h-4 mr-2" /> Code
+                        </TabsTrigger>
+                        <TabsTrigger value="patches" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent px-1 py-2 h-auto">
+                            <History className="w-4 h-4 mr-2" /> Patches
+                        </TabsTrigger>
+                        {canManage && (
+                            <TabsTrigger value="settings" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent px-1 py-2 h-auto">
+                                <Settings className="w-4 h-4 mr-2" /> Settings
+                            </TabsTrigger>
+                        )}
+                    </TabsList>
+
+                    <div className="mt-6">
+                        {/* Files Tab */}
+                        {tab === 'files' && (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" size="sm" className="gap-2">
+                                                    <GitBranch className="w-4 h-4 text-indigo-400" />
+                                                    {currentChannel}
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="start">
+                                                <DropdownMenuLabel>Switch Channel</DropdownMenuLabel>
+                                                <DropdownMenuSeparator />
+                                                {channels.map(c => (
+                                                    <DropdownMenuItem key={c.name} onClick={() => handleSwitchChannel(c.name)} className="flex items-center justify-between">
+                                                        {c.name}
+                                                        {c.isCurrent && <div className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+
+                                        {/* Breadcrumbs for path */}
+                                        <div className="flex items-center text-sm font-medium ml-2">
+                                            <Button variant="ghost" size="sm" onClick={() => setPath('')} className="px-1 h-7">
+                                                {name}
+                                            </Button>
+                                            {path.split('/').filter(Boolean).map((p, i) => (
+                                                <React.Fragment key={i}>
+                                                    <ChevronRight className="w-4 h-4 text-muted-foreground mx-1" />
+                                                    <Button variant="ghost" size="sm" className="px-1 h-7">{p}</Button>
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <div style={{ marginBottom: '16px' }}>
-                                        <select
-                                            value={newRole}
-                                            onChange={(e) => setNewRole(e.target.value)}
-                                            style={{ width: '100%', background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', padding: '8px', color: '#c9d1d9', boxSizing: 'border-box' }}
-                                        >
-                                            <option value="developer">Developer (Read/Write)</option>
-                                            <option value="maintainer">Maintainer (Manage/Write)</option>
-                                            <option value="viewer">Viewer (Read-only)</option>
-                                        </select>
-                                    </div>
-                                    <button type="submit" className="btn-primary" style={{ width: '100%', padding: '8px' }}>Add Collaborator</button>
-                                </form>
+                                </div>
+
+                                <Card className="overflow-hidden border-border/50">
+                                    {loading ? (
+                                        <div className="p-12 text-center text-muted-foreground animate-pulse">Loading files...</div>
+                                    ) : fileContent !== null ? (
+                                        <div className="bg-card">
+                                            <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50">
+                                                <span className="text-xs font-mono">{path.split('/').pop()}</span>
+                                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setFileContent(null)}>Close</Button>
+                                            </div>
+                                            <pre className="p-4 text-sm font-mono overflow-auto max-h-[600px] leading-relaxed">
+                                                <code>{fileContent}</code>
+                                            </pre>
+                                        </div>
+                                    ) : tree.length === 0 ? (
+                                        <div className="p-20 text-center space-y-4">
+                                            <Box className="w-12 h-12 mx-auto opacity-20 text-indigo-400" />
+                                            <h3 className="text-lg font-semibold">Repository is empty</h3>
+                                            <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                                                Add some files to your repository to see them here.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-border/50">
+                                            {path && (
+                                                <div 
+                                                    className="flex items-center gap-3 p-3 text-sm hover:bg-accent/30 cursor-pointer text-indigo-400 font-medium"
+                                                    onClick={() => setPath('')}
+                                                >
+                                                    <ArrowLeft className="w-4 h-4" /> ..
+                                                </div>
+                                            )}
+                                            {tree.map(item => (
+                                                <div 
+                                                    key={item} 
+                                                    className="flex items-center justify-between p-3 hover:bg-accent/30 cursor-pointer group transition-colors"
+                                                    onClick={() => setPath(item)}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <File className="w-4 h-4 text-muted-foreground group-hover:text-indigo-400" />
+                                                        <span className="text-sm font-medium">{item}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                                        <span className="hidden sm:inline italic opacity-0 group-hover:opacity-100 transition-opacity">Updated recently</span>
+                                                        <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </Card>
                             </div>
-                        </div>
-                        <div className="card">
-                            <h4 style={{ fontWeight: '600', marginBottom: '16px', fontSize: '14px' }}>Current Collaborators</h4>
-                            {(!repoMeta?.collaborators || repoMeta.collaborators.length === 0) ? (
-                                <p style={{ fontSize: '14px', color: '#8b949e' }}>No collaborators added yet.</p>
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    {repoMeta.collaborators.map(c => (
-                                        <div key={c.username} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <User size={16} color="#8b949e" />
-                                                <div>
-                                                    <div style={{ fontSize: '14px', fontWeight: '600' }}>{c.username}</div>
-                                                    <div style={{ fontSize: '11px', color: '#8b949e', textTransform: 'capitalize' }}>{c.role}</div>
+                        )}
+
+                        {/* Patches Tab */}
+                        {(tab === 'patches' || tab === 'patch-detail') && (
+                            <div className="space-y-6">
+                                {tab === 'patch-detail' ? (
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <Button variant="ghost" size="sm" onClick={() => setTab('patches')} className="gap-2">
+                                            <ArrowLeft className="w-4 h-4" /> Back to patches
+                                        </Button>
+                                        <Card className="border-border/50 shadow-lg overflow-hidden">
+                                            <CardHeader className="bg-muted/30 border-b">
+                                                <div className="flex items-center justify-between">
+                                                    <CardTitle className="text-lg">Patch Details</CardTitle>
+                                                    <code className="text-[10px] bg-accent px-2 py-1 rounded">Hash: {patchDetail?.hash || '...'}</code>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent className="p-0">
+                                                <div className="bg-[#0d1117] p-6">
+                                                    <pre className="text-sm font-mono text-indigo-300 leading-relaxed whitespace-pre-wrap">
+                                                        <code>{patchDetail}</code>
+                                                    </pre>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {log.length === 0 ? (
+                                            <div className="text-center py-20 border rounded-xl border-dashed">
+                                                <History className="w-10 h-10 mx-auto opacity-10 mb-4" />
+                                                <p className="text-muted-foreground">No patches found in history.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid gap-3">
+                                                {log.map(patch => (
+                                                    <Card 
+                                                        key={patch.hash} 
+                                                        className="hover:bg-accent/30 cursor-pointer border-border/50 transition-all hover:translate-x-1"
+                                                        onClick={() => showPatch(patch.hash)}
+                                                    >
+                                                        <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                                                                    <User className="w-4 h-4" />
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-semibold text-sm line-clamp-1">{patch.message}</div>
+                                                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                                                                        <span className="font-bold text-indigo-400">{patch.author}</span>
+                                                                        <span>•</span>
+                                                                        <span>{patch.date}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <code className="text-[10px] font-mono bg-accent px-2 py-1 rounded text-muted-foreground">
+                                                                {patch.hash.slice(0, 8)}
+                                                            </code>
+                                                        </CardHeader>
+                                                    </Card>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Settings Tab */}
+                        {tab === 'settings' && (
+                            <div className="space-y-8 max-w-3xl animate-in fade-in duration-300">
+                                <section className="space-y-4">
+                                    <div className="flex items-center gap-2 pb-2 border-b">
+                                        <Shield className="w-5 h-5 text-indigo-400" />
+                                        <h2 className="text-xl font-bold">Permissions</h2>
+                                    </div>
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle className="text-base">Repository Collaborators</CardTitle>
+                                            <CardDescription>Grant users access to push or manage this repository.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-4">
+                                                    <Input 
+                                                        placeholder="Username to invite..." 
+                                                        value={newCollab}
+                                                        onChange={(e) => setNewCollab(e.target.value)}
+                                                        className="max-w-xs"
+                                                    />
+                                                    <Button 
+                                                        onClick={() => {
+                                                            addCollaborator(name, newCollab, 'developer').then((res) => {
+                                                                if (res.error) {
+                                                                    alert('Failed to add user: ' + res.error);
+                                                                } else {
+                                                                    setNewCollab('');
+                                                                    loadRepoData();
+                                                                }
+                                                            }).catch(err => {
+                                                                alert('Error: ' + err.message);
+                                                            });
+                                                        }}
+                                                        disabled={!newCollab}
+                                                    >
+                                                        Add User
+                                                    </Button>
+                                                </div>
+                                                <div className="border border-border/50 rounded-md divide-y divide-border/50">
+                                                    {repoMeta?.collaborators?.map(c => (
+                                                        <div key={c.username} className="flex items-center justify-between p-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
+                                                                    <User className="w-4 h-4 text-muted-foreground" />
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-medium text-sm">{c.username}</div>
+                                                                    <div className="text-xs text-muted-foreground capitalize">{c.role}</div>
+                                                                </div>
+                                                            </div>
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="sm" 
+                                                                className="text-destructive hover:bg-destructive/10"
+                                                                onClick={() => {
+                                                                    removeCollaborator(name, c.username).then((res) => {
+                                                                        if (res.error) alert('Failed: ' + res.error);
+                                                                        else loadRepoData();
+                                                                    }).catch(err => alert('Error: ' + err.message));
+                                                                }}
+                                                            >
+                                                                Remove
+                                                            </Button>
+                                                        </div>
+                                                    ))}
+                                                    {(!repoMeta?.collaborators || repoMeta.collaborators.length === 0) && (
+                                                        <div className="p-4 text-center text-sm text-muted-foreground">
+                                                            No collaborators added yet.
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
-                                            <button onClick={() => handleRemoveCollab(c.username)} style={{ background: 'none', color: '#da3633', padding: '4px' }}>
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                                        </CardContent>
+                                    </Card>
+                                </section>
 
-                    {/* Danger Zone — owner only */}
-                    {userRole === 'owner' && (
-                        <div style={{ border: '1px solid rgba(218,54,51,0.4)', borderRadius: '8px', overflow: 'hidden' }}>
-                            <div style={{ background: 'rgba(218,54,51,0.08)', padding: '12px 20px', borderBottom: '1px solid rgba(218,54,51,0.3)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <AlertTriangle size={16} color="#f85149" />
-                                <h4 style={{ fontSize: '15px', fontWeight: '700', color: '#f85149', margin: 0 }}>Danger Zone</h4>
+                                {userRole === 'owner' && (
+                                    <section className="space-y-4">
+                                        <div className="flex items-center gap-2 pb-2 border-b text-destructive">
+                                            <AlertTriangle className="w-5 h-5" />
+                                            <h2 className="text-xl font-bold">Danger Zone</h2>
+                                        </div>
+                                        <Card className="border-destructive/30 bg-destructive/5">
+                                            <CardHeader>
+                                                <CardTitle className="text-base text-destructive">Delete this project</CardTitle>
+                                                <CardDescription>Once you delete a project, there is no going back. Please be certain.</CardDescription>
+                                            </CardHeader>
+                                            <CardContent className="flex flex-col sm:flex-row gap-4">
+                                                <Input 
+                                                    placeholder={`Type "${name}" to confirm`} 
+                                                    className="max-w-xs border-destructive/20 focus-visible:ring-destructive"
+                                                    value={deleteConfirm}
+                                                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                                                />
+                                                <Button 
+                                                    variant="destructive" 
+                                                    disabled={deleteConfirm !== name || deleteLoading}
+                                                    onClick={() => {
+                                                        setDeleteLoading(true);
+                                                        deleteRepo(name).then(() => navigate('/'));
+                                                    }}
+                                                >
+                                                    {deleteLoading ? 'Deleting...' : 'Delete Repository'}
+                                                </Button>
+                                            </CardContent>
+                                        </Card>
+                                    </section>
+                                )}
                             </div>
-                            <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '24px', flexWrap: 'wrap' }}>
-                                <div style={{ flex: 1 }}>
-                                    <p style={{ fontWeight: '600', marginBottom: '4px', fontSize: '14px' }}>Delete this repository</p>
-                                    <p style={{ fontSize: '13px', color: '#8b949e', margin: 0 }}>
-                                        Once deleted, all data and history will be permanently removed. This action <strong style={{ color: '#c9d1d9' }}>cannot</strong> be undone.
-                                    </p>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '220px' }}>
-                                    <input
-                                        id="delete-confirm-input"
-                                        type="text"
-                                        value={deleteConfirm}
-                                        onChange={(e) => setDeleteConfirm(e.target.value)}
-                                        placeholder={`Type "${name}" to confirm`}
-                                        style={{
-                                            background: '#0d1117',
-                                            border: `1px solid ${deleteConfirm === name ? '#da3633' : '#30363d'}`,
-                                            borderRadius: '6px', padding: '8px 10px',
-                                            color: '#c9d1d9', fontSize: '13px', width: '100%',
-                                            boxSizing: 'border-box'
-                                        }}
-                                    />
-                                    <button
-                                        id="delete-repo-btn"
-                                        onClick={handleDeleteRepo}
-                                        disabled={deleteConfirm !== name || deleteLoading}
-                                        style={{
-                                            background: deleteConfirm === name ? '#da3633' : '#21262d',
-                                            color: deleteConfirm === name ? 'white' : '#6e7681',
-                                            border: '1px solid rgba(218,54,51,0.5)',
-                                            borderRadius: '6px', padding: '8px 12px',
-                                            cursor: deleteConfirm === name ? 'pointer' : 'not-allowed',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                                            fontWeight: '600', fontSize: '13px',
-                                            transition: 'background 0.2s'
-                                        }}
-                                    >
-                                        <Trash2 size={14} />
-                                        {deleteLoading ? 'Deleting…' : 'Delete Repository'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {log.length === 0 ? (
-                        <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-                            <Clock size={48} color="#30363d" style={{ marginBottom: '16px' }} />
-                            <h3 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px' }}>No patches yet</h3>
-                            <p style={{ color: '#8b949e' }}>Patches represent changes made to this repository.</p>
-                        </div>
-                    ) : log.map(patch => (
-                        <div 
-                            key={patch.hash} 
-                            className="card" 
-                            style={{ display: 'flex', gap: '16px', cursor: 'pointer' }}
-                            onClick={() => showPatch(patch.hash)}
-                        >
-                            <div style={{ flex: 1 }}>
-                                <h4 style={{ fontWeight: '600', marginBottom: '4px' }}>{patch.message}</h4>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#8b949e' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <User size={12} /> {patch.author}
-                                    </div>
-                                    <span>{patch.date}</span>
-                                </div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <code style={{ fontSize: '12px', background: 'rgba(56, 139, 253, 0.1)', color: '#58a6ff', padding: '2px 6px', borderRadius: '4px' }}>
-                                    {patch.hash.slice(0, 8)}
-                                </code>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
+                        )}
+                    </div>
+                </Tabs>
+            </div>
+        </Layout>
     );
 };
 

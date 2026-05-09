@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createRepo } from '../api';
-import { Book, Plus, Lock, Globe } from 'lucide-react';
+import { Book, Plus, Lock, Globe, ArrowLeft, Info } from 'lucide-react';
+import Layout from '../components/Layout';
+import { Button } from '../components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '../components/ui/card';
+import { Input } from '../components/ui/input';
 
 const NewRepo = () => {
     const [name, setName] = useState('');
@@ -16,87 +20,117 @@ const NewRepo = () => {
         setLoading(true);
         setError('');
         try {
-            await createRepo(name, isPrivate);
-            navigate(`/repo/${name}`);
+            const data = await createRepo(name, isPrivate);
+            if (data.error) throw new Error(data.error);
+            navigate(`/repos/${name}`);
         } catch (err) {
-            setError(err.toString());
+            setError(err.message || err.toString());
             setLoading(false);
         }
     };
 
     return (
-        <div className="container fade-in" style={{ marginTop: '40px', maxWidth: '600px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '8px' }}>Create a new repository</h2>
-            <p style={{ color: '#8b949e', marginBottom: '24px' }}>
-                A repository contains all project files, including the patch history.
-            </p>
-            <div className="card">
-                <form onSubmit={handleSubmit}>
-                    <div style={{ marginBottom: '24px' }}>
-                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>Repository name</label>
-                        <input 
-                            type="text" 
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="my-awesome-project"
-                            style={{ 
-                                background: '#0d1117', 
-                                border: '1px solid #30363d', 
-                                borderRadius: '6px', 
-                                padding: '8px 12px',
-                                color: '#c9d1d9',
-                                width: '100%',
-                                fontSize: '16px'
-                            }} 
-                        />
-                    </div>
+        <Layout>
+            <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in duration-500">
+                <div className="space-y-2">
+                    <h1 className="text-3xl font-bold tracking-tight">Create a new project</h1>
+                    <p className="text-muted-foreground text-sm">
+                        Projects are where you keep your code (patches), files, and history.
+                    </p>
+                </div>
 
-                    <div style={{ marginBottom: '24px' }}>
-                        <label style={{ display: 'block', fontWeight: '600', marginBottom: '16px' }}>Visibility</label>
-                        <div 
-                            className={`card ${!isPrivate ? 'glass' : ''}`} 
-                            onClick={() => setIsPrivate(false)}
-                            style={{ cursor: 'pointer', display: 'flex', gap: '16px', marginBottom: '12px', borderColor: !isPrivate ? '#58a6ff' : '#30363d' }}
-                        >
-                            <div style={{ marginTop: '4px' }}>
-                                <input type="radio" checked={!isPrivate} readOnly />
+                <Card className="border-border/50">
+                    <form onSubmit={handleSubmit}>
+                        <CardHeader>
+                            <CardTitle className="text-lg">Project details</CardTitle>
+                            <CardDescription>Enter a unique name for your project.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-primary">Project name</label>
+                                <Input 
+                                    placeholder="my-awesome-project" 
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="h-10"
+                                />
+                                <p className="text-[11px] text-muted-foreground italic">
+                                    Project URL: {window.location.host}/repos/{name || '...'}
+                                </p>
                             </div>
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', fontSize: '14px' }}>
-                                    <Globe size={16} /> Public
-                                </div>
-                                <p style={{ fontSize: '12px', color: '#8b949e', marginTop: '4px' }}>Anyone on the internet can see this repository.</p>
-                            </div>
-                        </div>
-                        <div 
-                            className={`card ${isPrivate ? 'glass' : ''}`} 
-                            onClick={() => setIsPrivate(true)}
-                            style={{ cursor: 'pointer', display: 'flex', gap: '16px', borderColor: isPrivate ? '#58a6ff' : '#30363d' }}
-                        >
-                            <div style={{ marginTop: '4px' }}>
-                                <input type="radio" checked={isPrivate} readOnly />
-                            </div>
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', fontSize: '14px' }}>
-                                    <Lock size={16} /> Private
-                                </div>
-                                <p style={{ fontSize: '12px', color: '#8b949e', marginTop: '4px' }}>Only you can see this repository.</p>
-                            </div>
-                        </div>
-                    </div>
 
-                    {error && <p style={{ color: '#da3633', marginBottom: '16px', fontSize: '14px' }}>{error}</p>}
-                    <button 
-                        type="submit" 
-                        className="btn-primary" 
-                        disabled={loading || !name}
-                        style={{ width: '100%', padding: '10px' }}
-                    >
-                        {loading ? 'Creating...' : 'Create repository'}
-                    </button>
-                </form>
+                            <div className="space-y-3">
+                                <label className="text-sm font-semibold text-primary">Visibility Level</label>
+                                <div className="grid gap-3">
+                                    <div 
+                                        className={`flex items-start gap-3 p-4 rounded-xl border transition-all cursor-pointer ${
+                                            !isPrivate 
+                                                ? 'bg-indigo-500/5 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+                                                : 'hover:bg-accent/50 border-border/50'
+                                        }`}
+                                        onClick={() => setIsPrivate(false)}
+                                    >
+                                        <div className="mt-1">
+                                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${!isPrivate ? 'border-indigo-500' : 'border-muted-foreground'}`}>
+                                                {!isPrivate && <div className="w-2 h-2 rounded-full bg-indigo-500" />}
+                                            </div>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 font-semibold text-sm text-primary">
+                                                <Globe className="w-4 h-4 text-green-400" /> Public
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                                                Anyone can see the project. You choose who can record patches.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div 
+                                        className={`flex items-start gap-3 p-4 rounded-xl border transition-all cursor-pointer ${
+                                            isPrivate 
+                                                ? 'bg-indigo-500/5 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+                                                : 'hover:bg-accent/50 border-border/50'
+                                        }`}
+                                        onClick={() => setIsPrivate(true)}
+                                    >
+                                        <div className="mt-1">
+                                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isPrivate ? 'border-indigo-500' : 'border-muted-foreground'}`}>
+                                                {isPrivate && <div className="w-2 h-2 rounded-full bg-indigo-500" />}
+                                            </div>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 font-semibold text-sm text-primary">
+                                                <Lock className="w-4 h-4 text-purple-400" /> Private
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                                                Project access must be granted explicitly to each user.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {error && (
+                                <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm p-3 rounded-md flex items-center gap-2">
+                                    <Info className="w-4 h-4" />
+                                    {error}
+                                </div>
+                            )}
+                        </CardContent>
+                        <CardFooter className="bg-muted/30 border-t p-4 px-6 flex justify-between items-center">
+                            <Button variant="ghost" type="button" onClick={() => navigate('/')}>Cancel</Button>
+                            <Button 
+                                type="submit" 
+                                disabled={loading || !name}
+                                className="bg-indigo-600 hover:bg-indigo-700 min-w-[140px]"
+                            >
+                                {loading ? 'Creating...' : 'Create Project'}
+                            </Button>
+                        </CardFooter>
+                    </form>
+                </Card>
             </div>
-        </div>
+        </Layout>
     );
 };
 

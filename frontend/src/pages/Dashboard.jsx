@@ -1,151 +1,175 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchRepos } from '../api';
-import { Book, Lock, Globe, User, GitBranch, Compass, Plus } from 'lucide-react';
+import { 
+  Book, 
+  Lock, 
+  Globe, 
+  User, 
+  GitBranch, 
+  Compass, 
+  Plus, 
+  Search,
+  Filter,
+  Terminal
+} from 'lucide-react';
+import Layout from '../components/Layout';
+import { Button } from '../components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Input } from '../components/ui/input';
 
 const RepoCard = ({ repo }) => (
-    <div className="card" style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        transition: 'border-color 0.2s',
-    }}
-        onMouseEnter={e => e.currentTarget.style.borderColor = '#58a6ff'}
-        onMouseLeave={e => e.currentTarget.style.borderColor = '#30363d'}
-    >
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <Book size={20} color="#58a6ff" style={{ marginTop: '2px', flexShrink: 0 }} />
-            <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                    <Link
-                        to={`/repo/${repo.name}`}
-                        style={{ fontSize: '16px', fontWeight: '600', color: '#58a6ff' }}
-                    >
-                        {repo.name}
-                    </Link>
-                    <span
-                        className="badge"
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '4px',
-                            background: repo.isPrivate ? 'rgba(139,92,246,0.15)' : 'rgba(35,134,54,0.15)',
-                            color: repo.isPrivate ? '#a78bfa' : '#3fb950',
-                            border: `1px solid ${repo.isPrivate ? 'rgba(139,92,246,0.3)' : 'rgba(35,134,54,0.3)'}`,
-                        }}
-                    >
-                        {repo.isPrivate ? <Lock size={11} /> : <Globe size={11} />}
-                        {repo.isPrivate ? 'Private' : 'Public'}
-                    </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#8b949e' }}>
-                    <User size={12} />
-                    <span>{repo.owner}</span>
-                    {repo.createdAt && (
-                        <>
-                            <span>·</span>
-                            <span>Created {new Date(repo.createdAt).toLocaleDateString()}</span>
-                        </>
-                    )}
-                </div>
-                {repo.collaborators?.length > 0 && (
-                    <div style={{ marginTop: '6px', fontSize: '11px', color: '#6e7681' }}>
-                        {repo.collaborators.length} collaborator{repo.collaborators.length !== 1 ? 's' : ''}
-                    </div>
-                )}
-            </div>
+  <Card className="hover:border-indigo-500/50 transition-colors group cursor-pointer overflow-hidden">
+    <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-accent/50 flex items-center justify-center text-indigo-400">
+          <Book className="w-5 h-5" />
         </div>
-    </div>
-);
-
-const SectionHeader = ({ icon: Icon, title, count }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #21262d' }}>
-        <Icon size={20} color="#8b949e" />
-        <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>{title}</h2>
-        <span style={{
-            fontSize: '12px', fontWeight: '600',
-            background: '#21262d', color: '#8b949e',
-            padding: '1px 8px', borderRadius: '20px',
-            border: '1px solid #30363d'
-        }}>
-            {count}
-        </span>
-    </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <Link 
+              to={`/repos/${repo.name}`} 
+              className="font-semibold text-primary hover:text-indigo-400 transition-colors"
+            >
+              {repo.name}
+            </Link>
+            <div className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${
+              repo.isPrivate 
+                ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' 
+                : 'bg-green-500/10 text-green-400 border-green-500/20'
+            }`}>
+              {repo.isPrivate ? 'Private' : 'Public'}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+            <User className="w-3 h-3" />
+            <span>{repo.owner}</span>
+            <span>•</span>
+            <span>Created {new Date(repo.createdAt).toLocaleDateString()}</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="text-right hidden sm:block">
+          <div className="text-xs text-muted-foreground">Last updated</div>
+          <div className="text-xs font-medium">2 days ago</div>
+        </div>
+      </div>
+    </CardHeader>
+  </Card>
 );
 
 const Dashboard = () => {
-    const [repos, setRepos] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const currentUsername = localStorage.getItem('username');
+  const [repos, setRepos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const currentUsername = localStorage.getItem('username');
 
-    useEffect(() => {
-        fetchRepos().then(data => {
-            setRepos(Array.isArray(data) ? data : []);
-            setLoading(false);
-        });
-    }, []);
+  useEffect(() => {
+    fetchRepos().then(data => {
+      setRepos(Array.isArray(data) ? data : []);
+      setLoading(false);
+    });
+  }, []);
 
-    if (loading) return (
-        <div className="container" style={{ marginTop: '60px', textAlign: 'center', color: '#8b949e' }}>
-            <GitBranch size={32} style={{ marginBottom: '12px', opacity: 0.4 }} />
-            <p>Loading repositories…</p>
+  const filteredRepos = repos.filter(r => 
+    r.name.toLowerCase().includes(search.toLowerCase()) ||
+    r.owner.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const myRepos = filteredRepos.filter(r => r.owner === currentUsername);
+  const publicRepos = filteredRepos.filter(r => !r.isPrivate && r.owner !== currentUsername);
+
+  if (loading) return (
+    <Layout>
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+        <GitBranch className="w-8 h-8 mb-4 opacity-20 animate-pulse" />
+        <p>Fetching repositories...</p>
+      </div>
+    </Layout>
+  );
+
+  return (
+    <Layout>
+      <div className="space-y-8 max-w-5xl mx-auto">
+        {/* Welcome Section */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Your Projects</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage your version control repositories and collaborations.
+            </p>
+          </div>
+          <Button asChild className="bg-indigo-600 hover:bg-indigo-700">
+            <Link to="/new">
+              <Plus className="w-4 h-4 mr-2" /> New Project
+            </Link>
+          </Button>
         </div>
-    );
 
-    const myRepos = repos.filter(r => r.owner === currentUsername);
-    const publicRepos = repos.filter(r => !r.isPrivate && r.owner !== currentUsername);
 
-    const EmptyState = ({ message }) => (
-        <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
-            <p style={{ color: '#8b949e', fontSize: '14px', margin: 0 }}>{message}</p>
+
+        {/* Filters & Search */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Filter by name or owner..." 
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Button variant="outline">
+            <Filter className="w-4 h-4 mr-2" /> All Projects
+          </Button>
         </div>
-    );
 
-    return (
-        <div className="container fade-in" style={{ marginTop: '40px', maxWidth: '900px' }}>
-            {/* Page header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-                <div>
-                    <h1 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '4px' }}>
-                        {currentUsername ? `Welcome back, ${currentUsername}` : 'Repositories'}
-                    </h1>
-                    <p style={{ color: '#8b949e', fontSize: '14px', margin: 0 }}>
-                        Manage your Pijul repositories
-                    </p>
-                </div>
-                <Link
-                    to="/new"
-                    className="btn-primary"
-                    id="new-repo-btn"
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '14px', fontWeight: '600' }}
-                >
-                    <Plus size={16} /> New Repository
-                </Link>
+        {/* Project Lists */}
+        <div className="space-y-12">
+          <section>
+            <div className="flex items-center justify-between mb-4 px-1">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <User className="w-4 h-4 text-indigo-400" /> My Projects
+                <span className="bg-accent text-accent-foreground text-[10px] px-2 py-0.5 rounded-full">
+                  {myRepos.length}
+                </span>
+              </h2>
             </div>
+            {myRepos.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed rounded-xl border-accent/20 text-muted-foreground">
+                No personal projects found.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {myRepos.map(repo => <RepoCard key={repo.name} repo={repo} />)}
+              </div>
+            )}
+          </section>
 
-            {/* My Repositories */}
-            <div style={{ marginBottom: '48px' }}>
-                <SectionHeader icon={GitBranch} title="My Repositories" count={myRepos.length} />
-                {myRepos.length === 0 ? (
-                    <EmptyState message="You haven't created any repositories yet. Click 'New Repository' to get started!" />
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {myRepos.map(repo => <RepoCard key={repo.name} repo={repo} />)}
-                    </div>
-                )}
+          <section>
+            <div className="flex items-center justify-between mb-4 px-1">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Compass className="w-4 h-4 text-indigo-400" /> Explore
+                <span className="bg-accent text-accent-foreground text-[10px] px-2 py-0.5 rounded-full">
+                  {publicRepos.length}
+                </span>
+              </h2>
             </div>
-
-            {/* Explore Public Repositories */}
-            <div>
-                <SectionHeader icon={Compass} title="Explore Public Repositories" count={publicRepos.length} />
-                {publicRepos.length === 0 ? (
-                    <EmptyState message="No other public repositories available yet." />
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {publicRepos.map(repo => <RepoCard key={repo.name} repo={repo} />)}
-                    </div>
-                )}
-            </div>
+            {publicRepos.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed rounded-xl border-accent/20 text-muted-foreground">
+                No public projects to discover.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {publicRepos.map(repo => <RepoCard key={repo.name} repo={repo} />)}
+              </div>
+            )}
+          </section>
         </div>
-    );
+      </div>
+    </Layout>
+  );
 };
 
 export default Dashboard;

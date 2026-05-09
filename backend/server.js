@@ -162,6 +162,42 @@ app.get('/api/repos/:name/patches/:hash', optionalAuthenticateToken, checkRepoAc
     }
 });
 
+app.get('/api/repos/:name/channels', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
+    try {
+        const channels = await pijul.getChannels(req.params.name);
+        res.json(channels);
+    } catch (error) {
+        res.status(500).json({ error: error.toString() });
+    }
+});
+
+app.post('/api/repos/:name/channels/switch', authenticateToken, checkRepoAccess('write'), async (req, res) => {
+    const { channel } = req.body;
+    try {
+        await pijul.switchChannel(req.params.name, channel);
+        res.json({ message: `Switched to channel ${channel}` });
+    } catch (error) {
+        res.status(500).json({ error: error.toString() });
+    }
+});
+
+app.post('/api/repos/:name/fork', authenticateToken, checkRepoAccess('read'), async (req, res) => {
+    const sourceName = req.params.name;
+    const { newName } = req.body;
+    if (!newName) return res.status(400).json({ error: 'New name is required' });
+
+    try {
+        const newRepoName = `${newName}-${req.user.username}`; // Simple unique name strategy
+        await pijul.forkRepo(sourceName, newRepoName);
+        
+        // Register the new repo in store
+        const repo = repoStore.create(newRepoName, req.user.username, true); // Forks are private by default
+        res.json(repo);
+    } catch (error) {
+        res.status(500).json({ error: error.toString() });
+    }
+});
+
 // Collaborators
 app.post('/api/repos/:name/collaborators', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
     const { username, role } = req.body;

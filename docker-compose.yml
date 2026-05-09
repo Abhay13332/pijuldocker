@@ -2,6 +2,7 @@ version: '3.9'
 
 services:
   pijulserv:
+    image: abhay1302/pijulserv:v1.2
     build: .
     container_name: pijulserv-app
     ports:

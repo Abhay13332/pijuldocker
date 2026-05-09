@@ -122,3 +122,26 @@ export const deleteRepo = async (name) => {
     });
     return res.json();
 };
+
+export const fetchChannels = async (name) => {
+    const res = await fetch(`${API_BASE}/repos/${name}/channels`, { headers: getHeaders() });
+    return res.json();
+};
+
+export const switchChannel = async (name, channel) => {
+    const res = await fetch(`${API_BASE}/repos/${name}/channels/switch`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ channel })
+    });
+    return res.json();
+};
+
+export const forkRepo = async (name, newName) => {
+    const res = await fetch(`${API_BASE}/repos/${name}/fork`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ newName })
+    });
+    return res.json();
+};

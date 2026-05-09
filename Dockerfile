@@ -3,6 +3,10 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # ── System dependencies ──────────────────────────────────────────────────────
+RUN echo 'Acquire::https::Verify-Peer "false";' > /etc/apt/apt.conf.d/99insecure && \
+    echo 'Acquire::https::Verify-Host "false";' >> /etc/apt/apt.conf.d/99insecure && \
+    sed -i 's/http:/https:/g' /etc/apt/sources.list
+
 RUN apt-get update && apt-get install -y \
     curl \
     git \
