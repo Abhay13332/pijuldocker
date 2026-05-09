@@ -1,0 +1,16 @@
+version: '3.9'
+
+services:
+  pijulserv:
+    build: .
+    container_name: pijulserv-app
+    ports:
+      - "3001:3001"   # Backend API + Frontend (served by Express)
+      - "2222:22"     # SSH (mapped to 2222 on host to avoid conflict)
+    volumes:
+      - ./repos:/app/repos
+      - pijul_data:/app/backend/data
+    restart: unless-stopped
+
+volumes:
+  pijul_data:

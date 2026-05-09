@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+frontend/dist/
+
+# Application state (local data)
+# We ignore the entire data and repos directories as they contain server state
+data/
+repos/
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp

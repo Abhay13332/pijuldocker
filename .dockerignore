@@ -1,0 +1,22 @@
+# Node modules (reinstalled in image)
+node_modules
+*/node_modules
+
+# Frontend build output (built inside image)
+frontend/dist
+frontend/.vite
+
+# Git / IDE
+.git
+.gitignore
+.vscode
+*.md
+
+# Pijul data (mounted as volumes at runtime)
+repos/
+data/
+backend/data/
+
+# OS junk
+.DS_Store
+Thumbs.db
