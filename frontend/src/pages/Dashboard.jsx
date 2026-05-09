@@ -19,24 +19,24 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 
 const RepoCard = ({ repo }) => (
-  <Card className="hover:border-indigo-500/50 transition-colors group cursor-pointer overflow-hidden">
+  <Card className="hover:border-primary/50 transition-colors group cursor-pointer overflow-hidden">
     <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-accent/50 flex items-center justify-center text-indigo-400">
+        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary/80 group-hover:text-primary group-hover:bg-primary/20 transition-all">
           <Book className="w-5 h-5" />
         </div>
         <div>
           <div className="flex items-center gap-2">
             <Link 
               to={`/repos/${repo.name}`} 
-              className="font-semibold text-primary hover:text-indigo-400 transition-colors"
+              className="font-semibold text-foreground hover:text-primary transition-colors"
             >
               {repo.name}
             </Link>
-            <div className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-full border ${
+            <div className={`px-2 py-0.5 text-2xs font-bold uppercase rounded-full border ${
               repo.isPrivate 
-                ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' 
-                : 'bg-green-500/10 text-green-400 border-green-500/20'
+                ? 'bg-muted text-muted-foreground border-border' 
+                : 'bg-primary/5 text-muted-foreground border-border/50 group-hover:border-primary/30 group-hover:text-primary/80 transition-colors'
             }`}>
               {repo.isPrivate ? 'Private' : 'Public'}
             </div>
@@ -100,7 +100,7 @@ const Dashboard = () => {
               Manage your version control repositories and collaborations.
             </p>
           </div>
-          <Button asChild className="bg-indigo-600 hover:bg-indigo-700">
+          <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
             <Link to="/new">
               <Plus className="w-4 h-4 mr-2" /> New Project
             </Link>
@@ -130,8 +130,8 @@ const Dashboard = () => {
           <section>
             <div className="flex items-center justify-between mb-4 px-1">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <User className="w-4 h-4 text-indigo-400" /> My Projects
-                <span className="bg-accent text-accent-foreground text-[10px] px-2 py-0.5 rounded-full">
+                <User className="w-4 h-4 text-primary" /> My Projects
+                <span className="bg-accent text-accent-foreground text-2xs px-2 py-0.5 rounded-full">
                   {myRepos.length}
                 </span>
               </h2>
@@ -150,8 +150,8 @@ const Dashboard = () => {
           <section>
             <div className="flex items-center justify-between mb-4 px-1">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Compass className="w-4 h-4 text-indigo-400" /> Explore
-                <span className="bg-accent text-accent-foreground text-[10px] px-2 py-0.5 rounded-full">
+                <Compass className="w-4 h-4 text-primary" /> Explore
+                <span className="bg-accent text-accent-foreground text-2xs px-2 py-0.5 rounded-full">
                   {publicRepos.length}
                 </span>
               </h2>

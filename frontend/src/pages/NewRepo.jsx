@@ -54,7 +54,7 @@ const NewRepo = () => {
                                     onChange={(e) => setName(e.target.value)}
                                     className="h-10"
                                 />
-                                <p className="text-[11px] text-muted-foreground italic">
+                                <p className="text-2xs text-muted-foreground italic">
                                     Project URL: {window.location.host}/repos/{name || '...'}
                                 </p>
                             </div>
@@ -65,19 +65,19 @@ const NewRepo = () => {
                                     <div 
                                         className={`flex items-start gap-3 p-4 rounded-xl border transition-all cursor-pointer ${
                                             !isPrivate 
-                                                ? 'bg-indigo-500/5 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+                                                ? 'bg-primary/5 border-primary/50 shadow-sm' 
                                                 : 'hover:bg-accent/50 border-border/50'
                                         }`}
                                         onClick={() => setIsPrivate(false)}
                                     >
                                         <div className="mt-1">
-                                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${!isPrivate ? 'border-indigo-500' : 'border-muted-foreground'}`}>
-                                                {!isPrivate && <div className="w-2 h-2 rounded-full bg-indigo-500" />}
+                                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${!isPrivate ? 'border-primary' : 'border-muted-foreground'}`}>
+                                                {!isPrivate && <div className="w-2 h-2 rounded-full bg-primary" />}
                                             </div>
                                         </div>
                                         <div className="flex-1">
-                                            <div className="flex items-center gap-2 font-semibold text-sm text-primary">
-                                                <Globe className="w-4 h-4 text-green-400" /> Public
+                                            <div className="flex items-center gap-2 font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
+                                                <Globe className="w-4 h-4 text-muted-foreground group-hover:text-primary/70" /> Public
                                             </div>
                                             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                                                 Anyone can see the project. You choose who can record patches.
@@ -88,19 +88,19 @@ const NewRepo = () => {
                                     <div 
                                         className={`flex items-start gap-3 p-4 rounded-xl border transition-all cursor-pointer ${
                                             isPrivate 
-                                                ? 'bg-indigo-500/5 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+                                                ? 'bg-primary/5 border-primary/50 shadow-sm' 
                                                 : 'hover:bg-accent/50 border-border/50'
                                         }`}
                                         onClick={() => setIsPrivate(true)}
                                     >
                                         <div className="mt-1">
-                                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isPrivate ? 'border-indigo-500' : 'border-muted-foreground'}`}>
-                                                {isPrivate && <div className="w-2 h-2 rounded-full bg-indigo-500" />}
+                                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isPrivate ? 'border-primary' : 'border-muted-foreground'}`}>
+                                                {isPrivate && <div className="w-2 h-2 rounded-full bg-primary" />}
                                             </div>
                                         </div>
                                         <div className="flex-1">
-                                            <div className="flex items-center gap-2 font-semibold text-sm text-primary">
-                                                <Lock className="w-4 h-4 text-purple-400" /> Private
+                                            <div className="flex items-center gap-2 font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
+                                                <Lock className="w-4 h-4 text-muted-foreground group-hover:text-primary/70" /> Private
                                             </div>
                                             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                                                 Project access must be granted explicitly to each user.
@@ -122,7 +122,7 @@ const NewRepo = () => {
                             <Button 
                                 type="submit" 
                                 disabled={loading || !name}
-                                className="bg-indigo-600 hover:bg-indigo-700 min-w-[140px]"
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[140px]"
                             >
                                 {loading ? 'Creating...' : 'Create Project'}
                             </Button>

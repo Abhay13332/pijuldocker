@@ -70,7 +70,7 @@ const Settings = () => {
         <Layout>
             <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
                 <div className="flex items-center gap-4 border-b pb-6">
-                    <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                    <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                         <User className="w-8 h-8" />
                     </div>
                     <div>
@@ -130,7 +130,7 @@ const Settings = () => {
                                         </div>
                                     </CardContent>
                                     <CardFooter className="bg-muted/30 border-t p-3 flex justify-end">
-                                        <Button type="submit" disabled={!newKeyValue} className="bg-indigo-600 hover:bg-indigo-700 h-8 text-xs">
+                                        <Button type="submit" disabled={!newKeyValue} className="bg-primary hover:bg-primary/90 h-8 text-xs">
                                             <Plus className="w-3 h-3 mr-2" /> Add Key
                                         </Button>
                                     </CardFooter>
@@ -152,12 +152,12 @@ const Settings = () => {
                                             <Card key={key.id} className="border-border/50 hover:bg-accent/20 transition-colors group">
                                                 <div className="p-4 flex items-center justify-between">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-muted-foreground group-hover:text-indigo-400 group-hover:bg-indigo-500/10 transition-colors">
+                                                        <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-colors">
                                                             <Key className="w-5 h-5" />
                                                         </div>
                                                         <div>
                                                             <div className="font-semibold text-sm">{key.name}</div>
-                                                            <div className="text-[10px] font-mono text-muted-foreground mt-0.5 truncate max-w-[200px] sm:max-w-md">
+                                                            <div className="text-2xs font-mono text-muted-foreground mt-0.5 truncate max-w-[200px] sm:max-w-md">
                                                                 {key.key.slice(0, 60)}...
                                                             </div>
                                                         </div>
@@ -178,17 +178,17 @@ const Settings = () => {
                             </div>
                         </section>
 
-                        <Card className="bg-indigo-500/5 border-indigo-500/20 shadow-none">
+                        <Card className="bg-primary/5 border-primary/20 shadow-none">
                             <CardContent className="p-4 flex gap-4">
                                 <div className="mt-1">
-                                    <ShieldCheck className="w-5 h-5 text-indigo-400" />
+                                    <ShieldCheck className="w-5 h-5 text-primary" />
                                 </div>
                                 <div className="space-y-2">
-                                    <h4 className="text-sm font-bold text-indigo-300">Secure Authentication</h4>
+                                    <h4 className="text-sm font-bold text-primary">Secure Authentication</h4>
                                     <p className="text-xs text-muted-foreground leading-relaxed">
                                         Your keys are automatically synced across the cluster. New keys are active immediately for both SSH and Web-based operations.
                                     </p>
-                                    <div className="flex items-center gap-2 text-[10px] text-indigo-400/70 pt-1">
+                                    <div className="flex items-center gap-2 text-2xs text-primary/70 pt-1">
                                         <AlertCircle className="w-3 h-3" />
                                         <span>Authentication managed by PijulServ Dynamic Auth Protocol</span>
                                     </div>

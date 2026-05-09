@@ -16,6 +16,10 @@ const repoStore = {
         return JSON.parse(fs.readFileSync(REPO_META_FILE, 'utf8'));
     },
 
+    getByName(name) {
+        return this.getAll().find(r => r.name === name) || null;
+    },
+
     saveAll(data) {
         fs.writeFileSync(REPO_META_FILE, JSON.stringify(data, null, 2));
     },

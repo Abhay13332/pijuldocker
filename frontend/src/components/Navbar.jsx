@@ -14,49 +14,49 @@ const Navbar = () => {
     };
 
     return (
-        <nav className="glass" style={{ borderBottom: '1px solid #30363d', padding: '12px 0' }}>
-            <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                    <Link to="/" style={{ fontSize: '20px', fontWeight: '800', color: '#f0f6fc', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ background: '#f78166', width: '24px', height: '24px', borderRadius: '4px' }}></div>
+        <nav className="glass border-b py-3">
+            <div className="container flex justify-between items-center">
+                <div className="flex items-center gap-6">
+                    <Link to="/" className="text-xl font-extrabold text-foreground no-underline flex items-center gap-2">
+                        <div className="bg-primary w-6 h-6 rounded"></div>
                         PijulServ
                     </Link>
                     
-                    <div style={{ display: 'flex', alignItems: 'center', background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', padding: '4px 12px', width: '280px' }}>
-                        <Search size={16} color="#8b949e" />
+                    <div className="flex items-center bg-background border border-border rounded-md px-3 py-1 w-[280px]">
+                        <Search size={16} className="text-muted-foreground" />
                         <input 
                             type="text" 
                             placeholder="Search or jump to..." 
-                            style={{ background: 'none', border: 'none', color: '#c9d1d9', padding: '4px 8px', width: '100%', fontSize: '14px' }}
+                            className="bg-transparent border-none text-foreground px-2 py-1 w-full text-sm focus:outline-none"
                         />
                     </div>
 
-                    <Link to="/guide" style={{ color: '#8b949e', textDecoration: 'none', fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Link to="/guide" className="text-muted-foreground no-underline text-sm font-medium flex items-center gap-1 hover:text-foreground transition-colors">
                         <BookOpen size={16} /> Guide
                     </Link>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div className="flex items-center gap-4">
                     {username ? (
                         <>
-                            <Link to="/new" className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 12px', fontSize: '14px' }}>
+                            <Link to="/new" className="btn-primary flex items-center gap-1.5 px-3 py-1 text-sm">
                                 <Plus size={16} /> New
                             </Link>
-                            <Link to="/settings" style={{ color: '#8b949e' }}>
+                            <Link to="/settings" className="text-muted-foreground hover:text-foreground transition-colors">
                                 <Settings size={20} />
                             </Link>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', borderRadius: '6px' }}>
-                                <div style={{ width: '24px', height: '24px', background: '#30363d', borderRadius: '50%', display: 'flex', alignItems: 'center', justifySelf: 'center', paddingLeft: '4px' }}>
+                            <div className="flex items-center gap-2 px-2 py-1 rounded-md">
+                                <div className="w-6 h-6 bg-border rounded-full flex items-center justify-center pl-1">
                                     <UserAvatar name={username} />
                                 </div>
-                                <span style={{ fontSize: '14px', fontWeight: '600', color: '#c9d1d9' }}>{username}</span>
-                                <button onClick={handleLogout} style={{ background: 'none', border: 'none', padding: 0, color: '#8b949e', cursor: 'pointer', display: 'flex' }}>
+                                <span className="text-sm font-semibold text-foreground">{username}</span>
+                                <button onClick={handleLogout} className="bg-transparent border-none p-0 text-muted-foreground cursor-pointer flex hover:text-foreground transition-colors">
                                     <LogOut size={18} />
                                 </button>
                             </div>
                         </>
                     ) : (
-                        <Link to="/login" style={{ color: '#c9d1d9', textDecoration: 'none', fontSize: '14px', fontWeight: '600' }}>Sign in</Link>
+                        <Link to="/login" className="text-foreground no-underline text-sm font-semibold hover:text-primary transition-colors">Sign in</Link>
                     )}
                 </div>
             </div>
@@ -65,7 +65,7 @@ const Navbar = () => {
 };
 
 const UserAvatar = ({ name }) => {
-    return <span style={{ fontSize: '10px', color: '#c9d1d9' }}>{name.slice(0, 2).toUpperCase()}</span>;
+    return <span className="text-2xs text-foreground">{name.slice(0, 2).toUpperCase()}</span>;
 };
 
 export default Navbar;

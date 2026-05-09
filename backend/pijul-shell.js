@@ -99,25 +99,31 @@ try {
     process.exit(1);
 }
 
+// Resolve owner from store for filesystem path
+let repoOwner = null;
 if (repoName) {
+    const repoMeta = repoStore.getByName(repoName);
+    if (repoMeta) repoOwner = repoMeta.owner;
+
     if (!repoStore.canAccess(repoName, username, requiredLevel)) {
         log(`ACCESS DENIED: ${username} needs ${requiredLevel} on ${repoName}`);
         console.error(`Access Denied: ${requiredLevel} permission required for '${repoName}'.`);
         process.exit(1);
     }
-    log(`ACCESS GRANTED: ${username} has ${requiredLevel} on ${repoName}`);
+    log(`ACCESS GRANTED: ${username} has ${requiredLevel} on ${repoName} (owner: ${repoOwner})`);
 } else {
     log(`No repoName extracted, proceeding (pijul protocol may handle it)`);
 }
 
-// Rewrite the --repository argument to be a relative path, 
-// because pijul will look for the absolute path "/first" instead of inside REPOS_PATH
+// Rewrite the --repository argument to point at owner/reponame sub-directory.
+// pijul resolves it relative to REPOS_PATH (the cwd).
 const pijulArgs = parts.slice(1).map((arg, idx, arr) => {
-    // If the previous argument was --repository, strip leading slashes from this argument
     if (idx > 0 && arr[idx - 1] === '--repository') {
-        let cleanArg = arg.replace(/^['"]|['"]$/g, '');
+        let cleanArg = arg.replace(/^['"']|['"']$/g, '');
         cleanArg = cleanArg.replace(/^\d+:/, ''); // Strip accidental port prefix
-        return cleanArg.replace(/^\/+/, '');
+        const bareRepoName = cleanArg.replace(/^\/+/, '').split('/').pop();
+        // Prepend owner so pijul finds repos/<owner>/<name>
+        return repoOwner ? `${repoOwner}/${bareRepoName}` : bareRepoName;
     }
     return arg;
 });

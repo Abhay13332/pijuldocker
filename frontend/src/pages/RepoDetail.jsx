@@ -147,7 +147,11 @@ const RepoDetail = () => {
         setForkLoading(true);
         try {
             const newRepo = await forkRepo(name, name); // Will append -username in backend
-            navigate(`/repos/${newRepo.name}`);
+            if (newRepo.error) {
+                alert('Failed to fork repository: ' + newRepo.error);
+            } else {
+                navigate(`/repos/${newRepo.name}`);
+            }
         } catch (err) {
             alert('Failed to fork repository: ' + err.toString());
         }
@@ -188,22 +192,22 @@ const RepoDetail = () => {
                 {/* Repo Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
                             <Box className="w-6 h-6" />
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold flex items-center gap-2">
                                 {name}
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase ${
+                                <span className={`text-2xs px-2 py-0.5 rounded-full border uppercase transition-colors ${
                                     repoMeta?.isPrivate 
-                                        ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' 
-                                        : 'bg-green-500/10 text-green-400 border-green-500/20'
+                                        ? 'bg-muted text-muted-foreground border-border' 
+                                        : 'bg-primary/5 text-muted-foreground border-border/50 hover:border-primary/30 hover:text-primary/80'
                                 }`}>
                                     {repoMeta?.isPrivate ? 'Private' : 'Public'}
                                 </span>
                             </h1>
                             <p className="text-sm text-muted-foreground mt-0.5">
-                                Project ID: <span className="font-mono text-[10px]">{repoMeta?.id?.slice(0, 8)}</span>
+                                Project ID: <span className="font-mono text-2xs">{repoMeta?.id?.slice(0, 8)}</span>
                             </p>
                         </div>
                     </div>
@@ -215,7 +219,7 @@ const RepoDetail = () => {
                         </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button className="bg-indigo-600 hover:bg-indigo-700" size="sm">
+                                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" size="sm">
                                     <Code className="w-4 h-4 mr-2" />
                                     Clone
                                 </Button>
@@ -240,14 +244,14 @@ const RepoDetail = () => {
                 {/* Main Tabs */}
                 <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
                     <TabsList className="bg-transparent border-b rounded-none w-full justify-start h-auto p-0 gap-6">
-                        <TabsTrigger value="files" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent px-1 py-2 h-auto">
+                        <TabsTrigger value="files" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-1 py-2 h-auto">
                             <Code className="w-4 h-4 mr-2" /> Code
                         </TabsTrigger>
-                        <TabsTrigger value="patches" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent px-1 py-2 h-auto">
+                        <TabsTrigger value="patches" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-1 py-2 h-auto">
                             <History className="w-4 h-4 mr-2" /> Patches
                         </TabsTrigger>
                         {canManage && (
-                            <TabsTrigger value="settings" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent px-1 py-2 h-auto">
+                            <TabsTrigger value="settings" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-1 py-2 h-auto">
                                 <Settings className="w-4 h-4 mr-2" /> Settings
                             </TabsTrigger>
                         )}
@@ -262,7 +266,7 @@ const RepoDetail = () => {
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button variant="outline" size="sm" className="gap-2">
-                                                    <GitBranch className="w-4 h-4 text-indigo-400" />
+                                                    <GitBranch className="w-4 h-4 text-primary" />
                                                     {currentChannel}
                                                 </Button>
                                             </DropdownMenuTrigger>
@@ -308,7 +312,7 @@ const RepoDetail = () => {
                                         </div>
                                     ) : tree.length === 0 ? (
                                         <div className="p-20 text-center space-y-4">
-                                            <Box className="w-12 h-12 mx-auto opacity-20 text-indigo-400" />
+                                            <Box className="w-12 h-12 mx-auto opacity-20 text-primary" />
                                             <h3 className="text-lg font-semibold">Repository is empty</h3>
                                             <p className="text-sm text-muted-foreground max-w-xs mx-auto">
                                                 Add some files to your repository to see them here.
@@ -318,7 +322,7 @@ const RepoDetail = () => {
                                         <div className="divide-y divide-border/50">
                                             {path && (
                                                 <div 
-                                                    className="flex items-center gap-3 p-3 text-sm hover:bg-accent/30 cursor-pointer text-indigo-400 font-medium"
+                                                    className="flex items-center gap-3 p-3 text-sm hover:bg-accent/30 cursor-pointer text-primary font-medium"
                                                     onClick={() => setPath('')}
                                                 >
                                                     <ArrowLeft className="w-4 h-4" /> ..
@@ -331,7 +335,7 @@ const RepoDetail = () => {
                                                     onClick={() => setPath(item)}
                                                 >
                                                     <div className="flex items-center gap-3">
-                                                        <File className="w-4 h-4 text-muted-foreground group-hover:text-indigo-400" />
+                                                        <File className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
                                                         <span className="text-sm font-medium">{item}</span>
                                                     </div>
                                                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -358,12 +362,12 @@ const RepoDetail = () => {
                                             <CardHeader className="bg-muted/30 border-b">
                                                 <div className="flex items-center justify-between">
                                                     <CardTitle className="text-lg">Patch Details</CardTitle>
-                                                    <code className="text-[10px] bg-accent px-2 py-1 rounded">Hash: {patchDetail?.hash || '...'}</code>
+                                                    <code className="text-2xs bg-accent px-2 py-1 rounded">Hash: {patchDetail?.hash || '...'}</code>
                                                 </div>
                                             </CardHeader>
                                             <CardContent className="p-0">
-                                                <div className="bg-[#0d1117] p-6">
-                                                    <pre className="text-sm font-mono text-indigo-300 leading-relaxed whitespace-pre-wrap">
+                                                <div className="bg-muted/50 p-6">
+                                                    <pre className="text-sm font-mono text-primary leading-relaxed whitespace-pre-wrap">
                                                         <code>{patchDetail}</code>
                                                     </pre>
                                                 </div>
@@ -387,19 +391,19 @@ const RepoDetail = () => {
                                                     >
                                                         <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                                                                <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-all">
                                                                     <User className="w-4 h-4" />
                                                                 </div>
                                                                 <div>
                                                                     <div className="font-semibold text-sm line-clamp-1">{patch.message}</div>
-                                                                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                                                                        <span className="font-bold text-indigo-400">{patch.author}</span>
+                                                                    <div className="flex items-center gap-2 text-2xs text-muted-foreground mt-0.5">
+                                                                        <span className="font-bold text-primary">{patch.author}</span>
                                                                         <span>•</span>
                                                                         <span>{patch.date}</span>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            <code className="text-[10px] font-mono bg-accent px-2 py-1 rounded text-muted-foreground">
+                                                            <code className="text-2xs font-mono bg-accent px-2 py-1 rounded text-muted-foreground">
                                                                 {patch.hash.slice(0, 8)}
                                                             </code>
                                                         </CardHeader>
@@ -417,7 +421,7 @@ const RepoDetail = () => {
                             <div className="space-y-8 max-w-3xl animate-in fade-in duration-300">
                                 <section className="space-y-4">
                                     <div className="flex items-center gap-2 pb-2 border-b">
-                                        <Shield className="w-5 h-5 text-indigo-400" />
+                                        <Shield className="w-5 h-5 text-primary" />
                                         <h2 className="text-xl font-bold">Permissions</h2>
                                     </div>
                                     <Card>

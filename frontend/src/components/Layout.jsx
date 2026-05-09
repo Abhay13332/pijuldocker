@@ -57,9 +57,9 @@ const Layout = ({ children, repoName, owner }) => {
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
       <aside className="w-64 border-r bg-card flex flex-col shrink-0">
-        <div className="h-14 flex items-center px-6 border-bottom">
+        <div className="h-14 flex items-center px-6 border-b">
           <Link to="/" className="flex items-center gap-2 font-bold text-lg text-primary">
-            <Box className="w-6 h-6 text-indigo-500" />
+            <Box className="w-6 h-6 text-primary" />
             <span>PijulServ</span>
           </Link>
         </div>
@@ -115,7 +115,7 @@ const Layout = ({ children, repoName, owner }) => {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start gap-2 px-2">
-                <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold text-white">
+                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-primary-foreground">
                   {username?.charAt(0).toUpperCase()}
                 </div>
                 <span className="truncate">{username}</span>

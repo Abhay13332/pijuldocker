@@ -11,7 +11,7 @@ const Guide = () => {
         <Layout>
             <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-500 pb-12">
                 <div className="text-center space-y-4 mb-8 mt-4">
-                    <div className="w-16 h-16 bg-indigo-500/10 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                    <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-6">
                         <Rocket className="w-8 h-8" />
                     </div>
                     <h1 className="text-4xl font-extrabold tracking-tight">Getting Started with PijulServ</h1>
@@ -21,15 +21,15 @@ const Guide = () => {
                 {/* Step 1: SSH Key */}
                 <section className="space-y-4">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500">
+                        <div className="p-2 bg-primary/10 rounded-lg text-primary">
                             <Key className="w-6 h-6" />
                         </div>
                         <h2 className="text-2xl font-bold">1. Add your SSH Key</h2>
                     </div>
                     <Card className="border-border/50">
                         <CardContent className="pt-6 space-y-6">
-                            <div className="p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-xl space-y-3">
-                                <h3 className="text-indigo-400 font-semibold flex items-center gap-2">
+                            <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
+                                <h3 className="text-primary font-semibold flex items-center gap-2">
                                     <Rocket className="w-4 h-4" /> Automated Client Setup (Recommended)
                                 </h3>
                                 <p className="text-sm text-muted-foreground">
@@ -63,7 +63,7 @@ const Guide = () => {
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <CheckCircle className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
-                                        <span>Paste it into your <Link to="/settings" className="text-indigo-400 hover:underline">Settings</Link> page.</span>
+                                        <span>Paste it into your <Link to="/settings" className="text-primary hover:underline">Settings</Link> page.</span>
                                     </li>
                                 </ul>
                             </div>
@@ -74,7 +74,7 @@ const Guide = () => {
                 {/* Step 2: Identity */}
                 <section className="space-y-4">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-yellow-500/10 rounded-lg text-yellow-500">
+                        <div className="p-2 bg-secondary/10 rounded-lg text-secondary">
                             <Shield className="w-6 h-6" />
                         </div>
                         <h2 className="text-2xl font-bold">2. Setup Pijul Identity</h2>
@@ -89,12 +89,12 @@ const Guide = () => {
                             <div className="bg-muted/30 border rounded-xl p-4 mt-4">
                                 <h4 className="font-semibold text-sm mb-3">Recommended Answers:</h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
-                                    <div><strong className="text-indigo-400">Unique identity name:</strong> <span className="text-muted-foreground">Your username (e.g. anshuman)</span></div>
-                                    <div><strong className="text-indigo-400">Display name:</strong> <span className="text-muted-foreground">Your full name</span></div>
-                                    <div><strong className="text-indigo-400">Email:</strong> <span className="text-muted-foreground">Your account email</span></div>
-                                    <div><strong className="text-indigo-400">Change encryption?</strong> <span className="text-muted-foreground">Enter <code className="text-orange-400">y</code></span></div>
-                                    <div><strong className="text-indigo-400">Key to expire?</strong> <span className="text-muted-foreground">Enter <code className="text-orange-400">n</code></span></div>
-                                    <div><strong className="text-indigo-400">Link to remote?</strong> <span className="text-muted-foreground">Enter <code className="text-orange-400">n</code></span></div>
+                                    <div><strong className="text-primary">Unique identity name:</strong> <span className="text-muted-foreground">Your username (e.g. anshuman)</span></div>
+                                    <div><strong className="text-primary">Display name:</strong> <span className="text-muted-foreground">Your full name</span></div>
+                                    <div><strong className="text-primary">Email:</strong> <span className="text-muted-foreground">Your account email</span></div>
+                                    <div><strong className="text-primary">Change encryption?</strong> <span className="text-muted-foreground">Enter <code className="text-accent">y</code></span></div>
+                                    <div><strong className="text-primary">Key to expire?</strong> <span className="text-muted-foreground">Enter <code className="text-accent">n</code></span></div>
+                                    <div><strong className="text-primary">Link to remote?</strong> <span className="text-muted-foreground">Enter <code className="text-accent">n</code></span></div>
                                 </div>
                             </div>
                         </CardContent>
@@ -104,7 +104,7 @@ const Guide = () => {
                 {/* Step 3: Commands */}
                 <section className="space-y-4">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-500/10 rounded-lg text-green-500">
+                        <div className="p-2 bg-secondary/10 rounded-lg text-secondary">
                             <Code className="w-6 h-6" />
                         </div>
                         <h2 className="text-2xl font-bold">3. Basic Commands</h2>
@@ -135,7 +135,7 @@ pijul push pijulserv@${hostname}:/<repo-name>`}
                 {/* Troubleshooting */}
                 <section className="space-y-4">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
+                        <div className="p-2 bg-accent/10 rounded-lg text-accent">
                             <Info className="w-6 h-6" />
                         </div>
                         <h2 className="text-2xl font-bold">Troubleshooting & Tips</h2>
@@ -146,7 +146,7 @@ pijul push pijulserv@${hostname}:/<repo-name>`}
                                 <h4 className="font-semibold text-primary">"Timeout before authentication" or Password Prompt</h4>
                                 <p className="text-sm text-muted-foreground mt-1">
                                     If Pijul hangs and then asks for a system password, your SSH server has timed out while waiting for your SSH key passphrase.
-                                    <br/><strong className="text-indigo-400 mt-2 block">Fix:</strong> Use an SSH Agent so your key is provided instantly without a prompt:
+                                    <br/><strong className="text-primary mt-2 block">Fix:</strong> Use an SSH Agent so your key is provided instantly without a prompt:
                                 </p>
                                 <div className="bg-background border rounded-md p-3 my-3">
                                     <code className="text-sm font-mono text-primary whitespace-pre">

@@ -35,7 +35,7 @@ const Login = () => {
         <div className="min-h-screen flex items-center justify-center bg-background p-6">
             <div className="w-full max-w-md space-y-8">
                 <div className="flex flex-col items-center text-center space-y-2">
-                    <div className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 mb-2">
+                    <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20 mb-2">
                         <Box className="w-7 h-7" />
                     </div>
                     <h1 className="text-3xl font-bold tracking-tight">PijulServ</h1>
@@ -69,7 +69,7 @@ const Login = () => {
                                 <div className="flex items-center justify-between px-1">
                                     <label className="text-sm font-semibold text-primary">Password</label>
                                     {!isRegister && (
-                                        <Button variant="link" className="px-0 h-auto text-xs text-indigo-400" type="button">
+                                        <Button variant="link" className="px-0 h-auto text-xs text-primary" type="button">
                                             Forgot password?
                                         </Button>
                                     )}
@@ -94,7 +94,7 @@ const Login = () => {
                             )}
                         </CardContent>
                         <CardFooter className="flex flex-col gap-4">
-                            <Button className="w-full bg-indigo-600 hover:bg-indigo-700 h-10 group" type="submit">
+                            <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-10 group" type="submit">
                                 {isRegister ? 'Register' : 'Sign In'}
                                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                             </Button>
@@ -105,7 +105,7 @@ const Login = () => {
                                 </span>
                                 <Button 
                                     variant="link" 
-                                    className="px-2 h-auto text-indigo-400" 
+                                    className="px-2 h-auto text-primary" 
                                     type="button"
                                     onClick={() => setIsRegister(!isRegister)}
                                 >
@@ -116,7 +116,7 @@ const Login = () => {
                     </form>
                 </Card>
 
-                <div className="text-center text-[11px] text-muted-foreground">
+                <div className="text-center text-2xs text-muted-foreground">
                     By continuing, you agree to our Terms of Service and Privacy Policy.
                 </div>
             </div>

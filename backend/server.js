@@ -108,7 +108,7 @@ app.post('/api/repos', authenticateToken, async (req, res) => {
     const { name, isPrivate } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     try {
-        await pijul.initRepo(name);
+        await pijul.initRepo(req.user.username, name);
         const repo = repoStore.create(name, req.user.username, isPrivate);
         res.json(repo);
     } catch (error) {
@@ -128,7 +128,8 @@ const checkRepoAccess = (level) => (req, res, next) => {
 
 app.get('/api/repos/:name/log', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const log = await pijul.getLog(req.params.name);
+        const repo = repoStore.getByName(req.params.name);
+        const log = await pijul.getLog(repo.owner, req.params.name);
         res.json(log);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
@@ -137,7 +138,8 @@ app.get('/api/repos/:name/log', optionalAuthenticateToken, checkRepoAccess('read
 
 app.get('/api/repos/:name/tree', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const tree = await pijul.getTree(req.params.name, req.query.path || '');
+        const repo = repoStore.getByName(req.params.name);
+        const tree = await pijul.getTree(repo.owner, req.params.name, req.query.path || '');
         res.json(tree);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
@@ -146,7 +148,8 @@ app.get('/api/repos/:name/tree', optionalAuthenticateToken, checkRepoAccess('rea
 
 app.get('/api/repos/:name/blob', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const content = await pijul.getFileContent(req.params.name, req.query.path);
+        const repo = repoStore.getByName(req.params.name);
+        const content = await pijul.getFileContent(repo.owner, req.params.name, req.query.path);
         res.send(content);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
@@ -155,7 +158,8 @@ app.get('/api/repos/:name/blob', optionalAuthenticateToken, checkRepoAccess('rea
 
 app.get('/api/repos/:name/patches/:hash', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const patch = await pijul.getPatch(req.params.name, req.params.hash);
+        const repo = repoStore.getByName(req.params.name);
+        const patch = await pijul.getPatch(repo.owner, req.params.name, req.params.hash);
         res.json({ patch });
     } catch (error) {
         res.status(500).json({ error: error.toString() });
@@ -164,7 +168,8 @@ app.get('/api/repos/:name/patches/:hash', optionalAuthenticateToken, checkRepoAc
 
 app.get('/api/repos/:name/channels', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const channels = await pijul.getChannels(req.params.name);
+        const repo = repoStore.getByName(req.params.name);
+        const channels = await pijul.getChannels(repo.owner, req.params.name);
         res.json(channels);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
@@ -174,7 +179,8 @@ app.get('/api/repos/:name/channels', optionalAuthenticateToken, checkRepoAccess(
 app.post('/api/repos/:name/channels/switch', authenticateToken, checkRepoAccess('write'), async (req, res) => {
     const { channel } = req.body;
     try {
-        await pijul.switchChannel(req.params.name, channel);
+        const repo = repoStore.getByName(req.params.name);
+        await pijul.switchChannel(repo.owner, req.params.name, channel);
         res.json({ message: `Switched to channel ${channel}` });
     } catch (error) {
         res.status(500).json({ error: error.toString() });
@@ -183,15 +189,13 @@ app.post('/api/repos/:name/channels/switch', authenticateToken, checkRepoAccess(
 
 app.post('/api/repos/:name/fork', authenticateToken, checkRepoAccess('read'), async (req, res) => {
     const sourceName = req.params.name;
-    const { newName } = req.body;
-    if (!newName) return res.status(400).json({ error: 'New name is required' });
+    const sourceRepo = repoStore.getByName(sourceName);
+    if (!sourceRepo) return res.status(404).json({ error: 'Source repository not found' });
 
     try {
-        const newRepoName = `${newName}-${req.user.username}`; // Simple unique name strategy
-        await pijul.forkRepo(sourceName, newRepoName);
-        
-        // Register the new repo in store
-        const repo = repoStore.create(newRepoName, req.user.username, true); // Forks are private by default
+        const newRepoName = `${sourceName}-${req.user.username}`;
+        await pijul.forkRepo(sourceRepo.owner, sourceName, req.user.username, newRepoName);
+        const repo = repoStore.create(newRepoName, req.user.username, true);
         res.json(repo);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
@@ -221,7 +225,8 @@ app.delete('/api/repos/:name/collaborators/:username', authenticateToken, checkR
 // Delete a repository (owner only)
 app.delete('/api/repos/:name', authenticateToken, checkRepoAccess('delete'), async (req, res) => {
     try {
-        await pijul.deleteRepo(req.params.name);
+        const repo = repoStore.getByName(req.params.name);
+        await pijul.deleteRepo(repo.owner, req.params.name);
         repoStore.delete(req.params.name);
         res.json({ message: 'Repository deleted' });
     } catch (error) {
