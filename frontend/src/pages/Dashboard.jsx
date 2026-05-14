@@ -28,10 +28,10 @@ const RepoCard = ({ repo }) => (
         <div>
           <div className="flex items-center gap-2">
             <Link 
-              to={`/repos/${repo.name}`} 
+              to={`/repos/${repo.owner}/${repo.name}`} 
               className="font-semibold text-foreground hover:text-primary transition-colors"
             >
-              {repo.name}
+              <span className="text-muted-foreground font-normal">{repo.owner}/</span>{repo.name}
             </Link>
             <div className={`px-2 py-0.5 text-2xs font-bold uppercase rounded-full border ${
               repo.isPrivate 
@@ -42,9 +42,6 @@ const RepoCard = ({ repo }) => (
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-            <User className="w-3 h-3" />
-            <span>{repo.owner}</span>
-            <span>•</span>
             <span>Created {new Date(repo.createdAt).toLocaleDateString()}</span>
           </div>
         </div>

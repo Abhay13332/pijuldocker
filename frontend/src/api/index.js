@@ -63,7 +63,9 @@ export const deleteSshKey = async (id) => {
     return res.json();
 };
 
-// Repo functions
+// Repo functions — all use /owner/name namespace
+const repoPath = (owner, name) => `${owner}/${name}`;
+
 export const fetchRepos = async () => {
     const res = await fetch(`${API_BASE}/repos`, { headers: getHeaders() });
     return res.json();
@@ -78,28 +80,28 @@ export const createRepo = async (name, isPrivate = false) => {
     return res.json();
 };
 
-export const fetchRepoLog = async (name) => {
-    const res = await fetch(`${API_BASE}/repos/${name}/log`, { headers: getHeaders() });
+export const fetchRepoLog = async (owner, name, channel = 'main') => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/log?channel=${encodeURIComponent(channel)}`, { headers: getHeaders() });
     return res.json();
 };
 
-export const fetchRepoTree = async (name, path = '') => {
-    const res = await fetch(`${API_BASE}/repos/${name}/tree?path=${path}`, { headers: getHeaders() });
+export const fetchRepoTree = async (owner, name, path = '', channel = 'main') => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/tree?path=${encodeURIComponent(path)}&channel=${encodeURIComponent(channel)}`, { headers: getHeaders() });
     return res.json();
 };
 
-export const fetchFileContent = async (name, path) => {
-    const res = await fetch(`${API_BASE}/repos/${name}/blob?path=${path}`, { headers: getHeaders() });
+export const fetchFileContent = async (owner, name, path, channel = 'main') => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/blob?path=${encodeURIComponent(path)}&channel=${encodeURIComponent(channel)}`, { headers: getHeaders() });
     return res.text();
 };
 
-export const fetchPatchDetail = async (name, hash) => {
-    const res = await fetch(`${API_BASE}/repos/${name}/patches/${hash}`, { headers: getHeaders() });
+export const fetchPatchDetail = async (owner, name, hash, channel) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/patches/${hash}?channel=${channel || ''}`, { headers: getHeaders() });
     return res.json();
 };
 
-export const addCollaborator = async (repoName, username, role = 'developer') => {
-    const res = await fetch(`${API_BASE}/repos/${repoName}/collaborators`, {
+export const addCollaborator = async (owner, repoName, username, role = 'developer') => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/collaborators`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ username, role })
@@ -107,29 +109,29 @@ export const addCollaborator = async (repoName, username, role = 'developer') =>
     return res.json();
 };
 
-export const removeCollaborator = async (repoName, username) => {
-    const res = await fetch(`${API_BASE}/repos/${repoName}/collaborators/${username}`, {
+export const removeCollaborator = async (owner, repoName, username) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/collaborators/${username}`, {
         method: 'DELETE',
         headers: getHeaders()
     });
     return res.json();
 };
 
-export const deleteRepo = async (name) => {
-    const res = await fetch(`${API_BASE}/repos/${name}`, {
+export const deleteRepo = async (owner, name) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}`, {
         method: 'DELETE',
         headers: getHeaders()
     });
     return res.json();
 };
 
-export const fetchChannels = async (name) => {
-    const res = await fetch(`${API_BASE}/repos/${name}/channels`, { headers: getHeaders() });
+export const fetchChannels = async (owner, name) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/channels`, { headers: getHeaders() });
     return res.json();
 };
 
-export const switchChannel = async (name, channel) => {
-    const res = await fetch(`${API_BASE}/repos/${name}/channels/switch`, {
+export const switchChannel = async (owner, name, channel) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/channels/switch`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ channel })
@@ -137,11 +139,56 @@ export const switchChannel = async (name, channel) => {
     return res.json();
 };
 
-export const forkRepo = async (name, newName) => {
-    const res = await fetch(`${API_BASE}/repos/${name}/fork`, {
+export const forkRepo = async (owner, name, newName) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/fork`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ newName })
+    });
+    return res.json();
+};
+
+export const fetchDiscussions = async (owner, repoName) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions`, { headers: getHeaders() });
+    return res.json();
+};
+
+export const fetchDiscussion = async (owner, repoName, id) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions/${id}`, { headers: getHeaders() });
+    return res.json();
+};
+
+export const createDiscussion = async (owner, repoName, data) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(data)
+    });
+    return res.json();
+};
+
+export const addComment = async (owner, repoName, id, text) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions/${id}/comments`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ text })
+    });
+    return res.json();
+};
+
+export const mergeDiscussion = async (owner, repoName, id) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions/${id}/merge`, {
+        method: 'POST',
+        headers: getHeaders()
+    });
+    return res.json();
+};
+
+export const toggleProtection = async (owner, repoName, channel) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/protected-channels/toggle`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ channel })
     });
     return res.json();
 };

@@ -36,8 +36,8 @@ const pijul = {
         return runPijul(null, null, `init ${path.join(ownerPath, name)}`);
     },
 
-    async getLog(owner, repoName) {
-        const output = await runPijul(owner, repoName, 'log --description');
+    async getLog(owner, repoName, channel = 'main') {
+        const output = await runPijul(owner, repoName, `log --channel "${channel}" --description`);
         // Parse log output. Pijul log is usually like:
         // Change <HASH>
         // Author: <AUTHOR>
@@ -63,32 +63,49 @@ const pijul = {
         return patches;
     },
 
-    async getTree(owner, repoName, subPath = '') {
-        const output = await runPijul(owner, repoName, 'ls');
-        const files = output.split('\n').filter(f => f.trim() !== '');
+    async getTree(owner, repoName, subPath = '', channel = 'main') {
+        const repoPath = path.join(REPOS_PATH, owner, repoName);
+        const { getRepositoryFiles } = await import('./pijul-reader/index.js');
+        const allFiles = getRepositoryFiles(repoPath, channel, subPath);
         
-        // Convert flat list to tree if needed, but for now just return flat list
-        // or filter by subPath
-        if (!subPath) {
-            return files.filter(f => !f.includes('/'));
+        const prefix = subPath ? (subPath.endsWith('/') ? subPath : subPath + '/') : '';
+        const levelFiles = new Map();
+        
+        for (const file of allFiles) {
+            if (!file.path.startsWith(prefix)) continue;
+            
+            const relativePath = file.path.slice(prefix.length);
+            if (relativePath === '') continue; // The directory itself
+            
+            const parts = relativePath.split('/');
+            const name = parts[0];
+            const isDir = parts.length > 1 || file.isDir;
+            
+            if (!levelFiles.has(name)) {
+                levelFiles.set(name, { path: name, isDir });
+            } else if (isDir) {
+                levelFiles.get(name).isDir = true;
+            }
         }
-        const prefix = subPath.endsWith('/') ? subPath : subPath + '/';
-        return files
-            .filter(f => f.startsWith(prefix))
-            .map(f => f.slice(prefix.length))
-            .filter(f => !f.includes('/'));
+        
+        return Array.from(levelFiles.values());
     },
 
-    async getFileContent(owner, repoName, filePath) {
-        const fullPath = path.join(REPOS_PATH, owner, repoName, filePath);
-        if (!fs.existsSync(fullPath)) {
-            throw new Error('File not found');
+    async getFileContent(owner, repoName, filePath, channel = 'main') {
+        const repoPath = path.join(REPOS_PATH, owner, repoName);
+        const { getFileContent } = await import('./pijul-reader/index.js');
+        try {
+            const content = getFileContent(repoPath, channel, filePath);
+            return content.toString('utf8');
+        } catch (error) {
+            throw new Error('File not found or unreadable');
         }
-        return fs.readFileSync(fullPath, 'utf8');
     },
 
-    async getPatch(owner, repoName, hash) {
-        return runPijul(owner, repoName, `change ${hash}`);
+    async getPatch(owner, repoName, hash, channel = 'main') {
+        const repoPath = path.join(REPOS_PATH, owner, repoName);
+        const { getChangeDetails } = await import('./pijul-reader/index.js');
+        return getChangeDetails(repoPath, hash, channel);
     },
 
     async getChannels(owner, repoName) {
@@ -128,6 +145,15 @@ const pijul = {
         if (fs.existsSync(fullPath)) {
             fs.rmSync(fullPath, { recursive: true, force: true });
         }
+    },
+
+    async pullChannel(owner, repoName, fromChannel, toChannel) {
+        // In Pijul: pijul pull --from-channel from --channel target
+        return runPijul(owner, repoName, `pull --from-channel ${fromChannel} --channel ${toChannel} --all`);
+    },
+
+    async createChannel(owner, repoName, channelName) {
+        return runPijul(owner, repoName, `channel new ${channelName}`);
     }
 };
 

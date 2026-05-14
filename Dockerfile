@@ -51,7 +51,8 @@ WORKDIR /app
 # Copy source (respects .dockerignore)
 COPY . .
 
-# Install and build backend
+# Install and build backend (including native pijul-reader)
+RUN cd backend/pijul-reader && npm install && npm run build
 RUN cd backend && npm install --omit=dev
 
 # Install and build frontend

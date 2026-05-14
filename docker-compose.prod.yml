@@ -2,14 +2,14 @@ version: '3.9'
 
 services:
   pijulserv:
-    image: abhay1302/pijulserv:latest
+    image: docker.io/abhay1302/pijulserv:latest
     container_name: pijulserv-app
     ports:
       - "3001:3001"   # Web UI API & Frontend
-      - "2222:22"     # SSH
+      - "2222:2222"   # Custom Node SSH Server
     volumes:
       - pijul_repos:/app/repos
-      - pijul_data:/app/backend/data
+      - pijul_data:/app/data
     restart: unless-stopped
 
 volumes:

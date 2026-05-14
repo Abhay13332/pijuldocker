@@ -20,9 +20,9 @@ const App = () => {
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/guide" element={<Guide />} />
-                <Route path="/repos/:name" element={<RepoDetail />} />
-                <Route path="/repos/:name/:tab" element={<RepoDetail />} />
-                <Route path="/repo/:name" element={<Navigate to="/repos/:name" replace />} />
+                <Route path="/repos/:owner/:name" element={<RepoDetail />} />
+                <Route path="/repos/:owner/:name/:tab" element={<RepoDetail />} />
+                <Route path="/repo/:owner/:name" element={<Navigate to="/repos/:owner/:name" replace />} />
                 <Route path="/new" element={<ProtectedRoute><NewRepo /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Settings /></ProtectedRoute>} />

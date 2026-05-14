@@ -61,6 +61,13 @@ const requiredLevel = writeSubCommands.includes(subCommand) ? 'write' : 'read';
 // pijul sends: pijul protocol --version 3 --repository /reponame
 // We look for --repository explicitly, then fall back to any non-flag path arg.
 let repoName = null;
+let targetChannel = 'main'; // Default Pijul channel
+
+const channelFlagIdx = parts.indexOf('--channel');
+if (channelFlagIdx !== -1 && parts[channelFlagIdx + 1]) {
+    targetChannel = parts[channelFlagIdx + 1].replace(/^['"]|['"]$/g, '');
+}
+
 
 // First: check for explicit --repository flag
 const repoFlagIdx = parts.indexOf('--repository');
@@ -87,7 +94,7 @@ if (!repoName) {
     }
 }
 
-log(`subCommand=${subCommand}, repoName=${repoName}, requiredLevel=${requiredLevel}`);
+log(`subCommand=${subCommand}, repoName=${repoName}, channel=${targetChannel}, requiredLevel=${requiredLevel}`);
 
 // Load repoStore dynamically so it reads latest data
 let repoStore;
@@ -110,6 +117,25 @@ if (repoName) {
         console.error(`Access Denied: ${requiredLevel} permission required for '${repoName}'.`);
         process.exit(1);
     }
+
+    // Check branch protection
+    if (requiredLevel === 'write') {
+        const isDiscussionChannel = targetChannel.startsWith(':');
+        
+        // If it's a protected channel (like main) and NOT a discussion channel, enforce manage level
+        if (repoStore.isChannelProtected(repoName, targetChannel) && !isDiscussionChannel) {
+            if (!repoStore.canAccess(repoName, username, 'manage')) {
+                log(`PROTECTION BLOCKED: ${username} attempted push to protected channel ${targetChannel} on ${repoName}`);
+                console.error(`Error: Channel '${targetChannel}' is protected. Please submit a Discussion instead.`);
+                process.exit(1);
+            }
+        }
+        
+        // If it IS a discussion channel, we allow any authenticated user with 'read' access (viewer/developer/etc) to push
+        // (as long as they passed the initial canAccess check for 'read' or better)
+    }
+
+
     log(`ACCESS GRANTED: ${username} has ${requiredLevel} on ${repoName} (owner: ${repoOwner})`);
 } else {
     log(`No repoName extracted, proceeding (pijul protocol may handle it)`);
@@ -130,7 +156,21 @@ const pijulArgs = parts.slice(1).map((arg, idx, arr) => {
 
 log(`Executing: pijul ${pijulArgs.join(' ')} in ${REPOS_PATH}`);
 
-const child = spawn('pijul', pijulArgs, {
+let finalCommand = 'pijul';
+let finalArgs = pijulArgs;
+
+// If the user only has 'read' access, use unshare to mount the repos directory as read-only.
+if (!repoStore.canAccess(repoName, username, 'write')) {
+    log(`STRICT MODE: Running as Read-Only for ${username}`);
+    finalCommand = 'unshare';
+    finalArgs = [
+        '--map-root-user', '--mount', 
+        'bash', '-c', `mount --bind -o ro "${REPOS_PATH}" "${REPOS_PATH}" && exec pijul "$@"`,
+        '--', ...pijulArgs
+    ];
+}
+
+const child = spawn(finalCommand, finalArgs, {
     cwd: REPOS_PATH,
     stdio: 'inherit',
     env: { ...process.env, HOME: process.env.HOME || '/tmp' }

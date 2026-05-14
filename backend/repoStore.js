@@ -16,8 +16,19 @@ const repoStore = {
         return JSON.parse(fs.readFileSync(REPO_META_FILE, 'utf8'));
     },
 
-    getByName(name) {
-        return this.getAll().find(r => r.name === name) || null;
+    getByOwnerAndName(owner, name) {
+        return this.getAll().find(r => r.name === name && r.owner === owner) || null;
+    },
+
+    getByName(name, ownerHint = null) {
+        const all = this.getAll();
+        // If an owner hint is provided, prefer exact owner+name match
+        if (ownerHint) {
+            const exact = all.find(r => r.name === name && r.owner === ownerHint);
+            if (exact) return exact;
+        }
+        // Otherwise return first match (for backward compat with single-owner setups)
+        return all.find(r => r.name === name) || null;
     },
 
     saveAll(data) {
@@ -26,13 +37,15 @@ const repoStore = {
 
     create(name, owner, isPrivate = false) {
         const data = this.getAll();
-        if (data.find(r => r.name === name)) throw new Error('Repository already exists');
+        if (data.find(r => r.name === name && r.owner === owner)) throw new Error('Repository already exists for this owner');
         
         const newRepo = { 
+            id: Math.random().toString(36).substring(2, 10),
             name, 
             owner, 
             isPrivate, 
             collaborators: [], // Array of { username, role }
+            protectedChannels: ['main'], // Default protected channel
             createdAt: new Date().toISOString() 
         };
         data.push(newRepo);
@@ -40,9 +53,8 @@ const repoStore = {
         return newRepo;
     },
 
-    getUserRole(repoName, username) {
-        const data = this.getAll();
-        const repo = data.find(r => r.name === repoName);
+    getUserRole(owner, name, username) {
+        const repo = this.getByOwnerAndName(owner, name);
         if (!repo) return null;
         if (repo.owner === username) return 'owner';
         
@@ -61,8 +73,8 @@ const repoStore = {
         });
     },
 
-    canAccess(name, username, requiredLevel = 'read') {
-        const role = this.getUserRole(name, username);
+    canAccess(owner, name, username, requiredLevel = 'read') {
+        const role = this.getUserRole(owner, name, username);
         if (!role) return false;
 
         const levels = {
@@ -75,9 +87,9 @@ const repoStore = {
         return levels[requiredLevel].includes(role);
     },
 
-    addCollaborator(name, username, role = 'developer') {
+    addCollaborator(owner, name, username, role = 'developer') {
         const data = this.getAll();
-        const repo = data.find(r => r.name === name);
+        const repo = data.find(r => r.name === name && r.owner === owner);
         if (!repo) throw new Error('Repository not found');
         if (!repo.collaborators) repo.collaborators = [];
         
@@ -92,9 +104,9 @@ const repoStore = {
         return repo;
     },
 
-    removeCollaborator(name, username) {
+    removeCollaborator(owner, name, username) {
         const data = this.getAll();
-        const repo = data.find(r => r.name === name);
+        const repo = data.find(r => r.name === name && r.owner === owner);
         if (!repo) throw new Error('Repository not found');
         if (!repo.collaborators) return repo;
         repo.collaborators = repo.collaborators.filter(c => c.username !== username);
@@ -102,9 +114,31 @@ const repoStore = {
         return repo;
     },
 
-    delete(name) {
+    toggleProtectedChannel(owner, name, channel) {
         const data = this.getAll();
-        const filtered = data.filter(r => r.name !== name);
+        const repo = data.find(r => r.name === name && r.owner === owner);
+        if (!repo) throw new Error('Repository not found');
+        if (!repo.protectedChannels) repo.protectedChannels = [];
+        
+        const idx = repo.protectedChannels.indexOf(channel);
+        if (idx === -1) {
+            repo.protectedChannels.push(channel);
+        } else {
+            repo.protectedChannels.splice(idx, 1);
+        }
+        this.saveAll(data);
+        return repo;
+    },
+
+    isChannelProtected(owner, name, channel) {
+        const repo = this.getByOwnerAndName(owner, name);
+        if (!repo || !repo.protectedChannels) return false;
+        return repo.protectedChannels.includes(channel);
+    },
+
+    delete(owner, name) {
+        const data = this.getAll();
+        const filtered = data.filter(r => !(r.name === name && r.owner === owner));
         this.saveAll(filtered);
     }
 };

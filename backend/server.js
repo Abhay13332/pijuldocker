@@ -6,9 +6,10 @@ const jwt = require('jsonwebtoken');
 const pijul = require('./pijul');
 const users = require('./users');
 const repoStore = require('./repoStore');
-
+const discussionStore = require('./discussionStore');
 const app = express();
 const PORT = 3001;
+
 const JWT_SECRET = 'pijul-serv-secret-key';
 
 app.use(cors({
@@ -116,119 +117,178 @@ app.post('/api/repos', authenticateToken, async (req, res) => {
     }
 });
 
+// Middleware: resolve repo by owner+name from URL — supports same-name repos for different users
 const checkRepoAccess = (level) => (req, res, next) => {
+    const owner = req.params.owner;
     const repoName = req.params.name;
     const username = req.user ? req.user.username : null;
-    if (repoStore.canAccess(repoName, username, level)) {
+    const repo = repoStore.getByOwnerAndName(owner, repoName);
+    if (!repo) return res.status(404).json({ error: `Repository '${owner}/${repoName}' not found` });
+    req.repo = repo;
+    if (repoStore.canAccess(owner, repoName, username, level)) {
         next();
     } else {
         res.status(403).json({ error: `Insufficient permissions (requires ${level})` });
     }
 };
 
-app.get('/api/repos/:name/log', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
+app.get('/api/repos/:owner/:name/log', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const repo = repoStore.getByName(req.params.name);
-        const log = await pijul.getLog(repo.owner, req.params.name);
+        const channel = req.query.channel || 'main';
+        const log = await pijul.getLog(req.repo.owner, req.repo.name, channel);
         res.json(log);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }
 });
 
-app.get('/api/repos/:name/tree', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
+app.get('/api/repos/:owner/:name/tree', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const repo = repoStore.getByName(req.params.name);
-        const tree = await pijul.getTree(repo.owner, req.params.name, req.query.path || '');
+        const channel = req.query.channel || 'main';
+        const tree = await pijul.getTree(req.repo.owner, req.repo.name, req.query.path || '', channel);
         res.json(tree);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }
 });
 
-app.get('/api/repos/:name/blob', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
+app.get('/api/repos/:owner/:name/blob', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const repo = repoStore.getByName(req.params.name);
-        const content = await pijul.getFileContent(repo.owner, req.params.name, req.query.path);
-        res.send(content);
+        const channel = req.query.channel || 'main';
+        const content = await pijul.getFileContent(req.repo.owner, req.repo.name, req.query.path, channel);
+        res.type('text/plain').send(content);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }
 });
 
-app.get('/api/repos/:name/patches/:hash', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
+app.get('/api/repos/:owner/:name/patches/:hash', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const repo = repoStore.getByName(req.params.name);
-        const patch = await pijul.getPatch(repo.owner, req.params.name, req.params.hash);
+        const patch = await pijul.getPatch(req.repo.owner, req.repo.name, req.params.hash, req.query.channel);
         res.json({ patch });
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }
 });
 
-app.get('/api/repos/:name/channels', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
+app.get('/api/repos/:owner/:name/channels', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
-        const repo = repoStore.getByName(req.params.name);
-        const channels = await pijul.getChannels(repo.owner, req.params.name);
+        const channels = await pijul.getChannels(req.repo.owner, req.repo.name);
         res.json(channels);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }
 });
 
-app.post('/api/repos/:name/channels/switch', authenticateToken, checkRepoAccess('write'), async (req, res) => {
+app.post('/api/repos/:owner/:name/channels/switch', authenticateToken, checkRepoAccess('write'), async (req, res) => {
     const { channel } = req.body;
     try {
-        const repo = repoStore.getByName(req.params.name);
-        await pijul.switchChannel(repo.owner, req.params.name, channel);
+        await pijul.switchChannel(req.repo.owner, req.repo.name, channel);
         res.json({ message: `Switched to channel ${channel}` });
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }
 });
 
-app.post('/api/repos/:name/fork', authenticateToken, checkRepoAccess('read'), async (req, res) => {
-    const sourceName = req.params.name;
-    const sourceRepo = repoStore.getByName(sourceName);
+app.post('/api/repos/:owner/:name/fork', authenticateToken, checkRepoAccess('read'), async (req, res) => {
+    const sourceOwner = req.params.owner;
+    const sourceName  = req.params.name;
+    const sourceRepo  = req.repo;
     if (!sourceRepo) return res.status(404).json({ error: 'Source repository not found' });
-
+    const newName = `${sourceName}-${req.user.username}`;
     try {
-        const newRepoName = `${sourceName}-${req.user.username}`;
-        await pijul.forkRepo(sourceRepo.owner, sourceName, req.user.username, newRepoName);
-        const repo = repoStore.create(newRepoName, req.user.username, true);
-        res.json(repo);
+        await pijul.forkRepo(sourceOwner, sourceName, req.user.username, newName);
+        const forked = repoStore.create(newName, req.user.username, sourceRepo.isPrivate);
+        res.json(forked);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }
 });
 
 // Collaborators
-app.post('/api/repos/:name/collaborators', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
+app.post('/api/repos/:owner/:name/collaborators', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
     const { username, role } = req.body;
     try {
-        const repo = repoStore.addCollaborator(req.params.name, username, role);
-        res.json(repo.collaborators);
+        const updated = repoStore.addCollaborator(req.repo.owner, req.repo.name, username, role);
+        res.json(updated.collaborators);
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
 
-app.delete('/api/repos/:name/collaborators/:username', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
+app.delete('/api/repos/:owner/:name/collaborators/:username', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
     try {
-        const repo = repoStore.removeCollaborator(req.params.name, req.params.username);
-        res.json(repo.collaborators);
+        const updated = repoStore.removeCollaborator(req.repo.owner, req.repo.name, req.params.username);
+        res.json(updated.collaborators);
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
 
 // Delete a repository (owner only)
-app.delete('/api/repos/:name', authenticateToken, checkRepoAccess('delete'), async (req, res) => {
+app.delete('/api/repos/:owner/:name', authenticateToken, checkRepoAccess('delete'), async (req, res) => {
     try {
-        const repo = repoStore.getByName(req.params.name);
-        await pijul.deleteRepo(repo.owner, req.params.name);
-        repoStore.delete(req.params.name);
+        await pijul.deleteRepo(req.repo.owner, req.repo.name);
+        repoStore.delete(req.repo.owner, req.repo.name);
         res.json({ message: 'Repository deleted' });
+    } catch (error) {
+        res.status(500).json({ error: error.toString() });
+    }
+});
+
+// Branch Protection
+app.post('/api/repos/:owner/:name/protected-channels/toggle', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
+    const { channel } = req.body;
+    try {
+        const updated = repoStore.toggleProtectedChannel(req.repo.owner, req.repo.name, channel);
+        res.json(updated);
+    } catch (error) {
+        res.status(500).json({ error: error.toString() });
+    }
+});
+
+// Discussions / PRs
+app.get('/api/repos/:owner/:name/discussions', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
+    const discussions = discussionStore.getByRepo(req.repo.owner, req.repo.name);
+    res.json(discussions);
+});
+
+app.post('/api/repos/:owner/:name/discussions', authenticateToken, checkRepoAccess('read'), async (req, res) => {
+    const { title, description } = req.body;
+    try {
+        const pr = discussionStore.create(req.repo.owner, req.repo.name, title, description, req.user.username);
+        await pijul.createChannel(req.repo.owner, req.repo.name, `pr-${pr.id}`);
+        res.json(pr);
+    } catch (error) {
+        res.status(500).json({ error: error.toString() });
+    }
+});
+
+app.get('/api/repos/:owner/:name/discussions/:id', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
+    const pr = discussionStore.getById(req.repo.owner, req.repo.name, req.params.id);
+    if (!pr) return res.status(404).json({ error: 'Discussion not found' });
+    res.json(pr);
+});
+
+app.post('/api/repos/:owner/:name/discussions/:id/comments', authenticateToken, checkRepoAccess('read'), async (req, res) => {
+    const { text } = req.body;
+    try {
+        const updatedPR = discussionStore.addComment(req.params.id, req.user.username, text);
+        res.json(updatedPR);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+app.post('/api/repos/:owner/:name/discussions/:id/merge', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
+    const pr = discussionStore.getById(req.repo.owner, req.repo.name, req.params.id);
+    if (!pr) return res.status(404).json({ error: 'Discussion not found' });
+    if (pr.status !== 'open') return res.status(400).json({ error: 'Already merged or closed' });
+
+    try {
+        await pijul.pullChannel(req.repo.owner, req.repo.name, pr.sourceChannel, pr.targetChannel);
+        discussionStore.updateStatus(req.params.id, 'merged');
+        res.json({ message: 'Merged successfully' });
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }

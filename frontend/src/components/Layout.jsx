@@ -46,6 +46,8 @@ const Layout = ({ children, repoName, owner }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const username = localStorage.getItem('username');
+  // Build the /owner/name base for all repo-scoped URLs
+  const repoBase = owner && repoName ? `${owner}/${repoName}` : repoName;
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -78,7 +80,7 @@ const Layout = ({ children, repoName, owner }) => {
             active={location.pathname === '/guide'} 
           />
           
-          {repoName && (
+          {repoBase && (
             <div className="pt-4 pb-2">
               <div className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 Project
@@ -86,26 +88,26 @@ const Layout = ({ children, repoName, owner }) => {
               <SidebarItem 
                 icon={Book} 
                 label="Overview" 
-                to={`/repos/${repoName}`} 
-                active={location.pathname === `/repos/${repoName}`} 
+                to={`/repos/${repoBase}`} 
+                active={location.pathname === `/repos/${repoBase}`} 
               />
               <SidebarItem 
                 icon={FileCode} 
                 label="Repository" 
-                to={`/repos/${repoName}/files`} 
-                active={location.pathname.startsWith(`/repos/${repoName}/files`)} 
+                to={`/repos/${repoBase}/files`} 
+                active={location.pathname.startsWith(`/repos/${repoBase}/files`)} 
               />
               <SidebarItem 
                 icon={History} 
                 label="Commits" 
-                to={`/repos/${repoName}/patches`} 
-                active={location.pathname.startsWith(`/repos/${repoName}/patches`)} 
+                to={`/repos/${repoBase}/patches`} 
+                active={location.pathname.startsWith(`/repos/${repoBase}/patches`)} 
               />
               <SidebarItem 
                 icon={Settings} 
                 label="Settings" 
-                to={`/repos/${repoName}/settings`} 
-                active={location.pathname.startsWith(`/repos/${repoName}/settings`)} 
+                to={`/repos/${repoBase}/settings`} 
+                active={location.pathname.startsWith(`/repos/${repoBase}/settings`)} 
               />
             </div>
           )}

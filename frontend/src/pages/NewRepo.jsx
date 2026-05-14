@@ -22,7 +22,8 @@ const NewRepo = () => {
         try {
             const data = await createRepo(name, isPrivate);
             if (data.error) throw new Error(data.error);
-            navigate(`/repos/${name}`);
+            // data.owner is set by the backend from the JWT token
+            navigate(`/repos/${data.owner}/${data.name}`);
         } catch (err) {
             setError(err.message || err.toString());
             setLoading(false);
@@ -55,7 +56,7 @@ const NewRepo = () => {
                                     className="h-10"
                                 />
                                 <p className="text-2xs text-muted-foreground italic">
-                                    Project URL: {window.location.host}/repos/{name || '...'}
+                                    Project URL: {window.location.host}/repos/{localStorage.getItem('username') || 'user'}/{name || '...'}
                                 </p>
                             </div>
 

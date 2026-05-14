@@ -11,7 +11,13 @@ import {
   deleteRepo,
   fetchChannels,
   switchChannel,
-  forkRepo
+  forkRepo,
+  fetchDiscussions,
+  fetchDiscussion,
+  createDiscussion,
+  addComment,
+  mergeDiscussion,
+  toggleProtection
 } from '../api';
 import { 
   File, 
@@ -36,7 +42,11 @@ import {
   ExternalLink,
   Search,
   MoreVertical,
-  History
+  History,
+  MessageSquare,
+  ArrowUpCircle,
+  CheckCircle2,
+  Unlock
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
@@ -53,7 +63,7 @@ import {
 } from '../components/ui/dropdown-menu';
 
 const RepoDetail = () => {
-    const { name, tab: urlTab } = useParams();
+    const { owner, name, tab: urlTab } = useParams();
     const navigate = useNavigate();
     const [tab, setTab] = useState(urlTab || 'files');
 
@@ -65,7 +75,7 @@ const RepoDetail = () => {
 
     const handleTabChange = (newTab) => {
         setTab(newTab);
-        navigate(`/repos/${name}/${newTab}`);
+        navigate(`/repos/${owner}/${name}/${newTab}`);
     };
     const [repoMeta, setRepoMeta] = useState(null);
     const [tree, setTree] = useState([]);
@@ -79,6 +89,14 @@ const RepoDetail = () => {
     const [deleteLoading, setDeleteLoading] = useState(false);
     const [forkLoading, setForkLoading] = useState(false);
     const [newCollab, setNewCollab] = useState('');
+    const [newCollabRole, setNewCollabRole] = useState('developer');
+    const [discussions, setDiscussions] = useState([]);
+    const [selectedPR, setSelectedPR] = useState(null);
+    const [isCreatingPR, setIsCreatingPR] = useState(false);
+    const [newPR, setNewPR] = useState({ title: '', description: '', sourceChannel: '', targetChannel: 'main' });
+    const [commentText, setCommentText] = useState('');
+    const [selectedChannel, setSelectedChannel] = useState('main');
+    const [copiedHash, setCopiedHash] = useState(false);
 
     const currentUsername = localStorage.getItem('username');
 
@@ -91,9 +109,12 @@ const RepoDetail = () => {
         try {
             const [reposData, channelsData] = await Promise.all([
                 fetchRepos(),
-                fetchChannels(name)
+                fetchChannels(owner, name)
             ]);
-            const meta = Array.isArray(reposData) ? reposData.find(r => r.name === name) : null;
+            // Find by owner+name — exact match, no ambiguity
+            const meta = Array.isArray(reposData)
+                ? reposData.find(r => r.name === name && r.owner === owner)
+                : null;
             setRepoMeta(meta);
             setChannels(Array.isArray(channelsData) ? channelsData : []);
         } catch (err) {
@@ -110,17 +131,20 @@ const RepoDetail = () => {
             try {
                 if (tab === 'files') {
                     if (path && !path.endsWith('/')) {
-                        const content = await fetchFileContent(name, path);
+                        const content = await fetchFileContent(owner, name, path, selectedChannel);
                         setFileContent(content);
                     } else {
-                        const data = await fetchRepoTree(name, path);
-                        const filteredData = Array.isArray(data) ? data.filter(item => item !== "No tracked files") : [];
+                        const data = await fetchRepoTree(owner, name, path, selectedChannel);
+                        const filteredData = Array.isArray(data) ? data : [];
                         setTree(filteredData);
                         setFileContent(null);
                     }
                 } else if (tab === 'patches') {
-                    const data = await fetchRepoLog(name);
+                    const data = await fetchRepoLog(owner, name, selectedChannel);
                     setLog(Array.isArray(data) ? data : []);
+                } else if (tab === 'discussions') {
+                    const data = await fetchDiscussions(owner, name);
+                    setDiscussions(Array.isArray(data) ? data : []);
                 }
             } catch (err) {
                 console.error('Error loading content:', err);
@@ -129,28 +153,77 @@ const RepoDetail = () => {
         };
         
         loadContent();
-    }, [name, tab, path]);
+    }, [name, tab, path, selectedChannel]);
 
     const handleSwitchChannel = async (channelName) => {
         setLoading(true);
         try {
-            await switchChannel(name, channelName);
-            await loadRepoData(); // Refresh metadata and channels
-            setPath(''); // Reset path on channel switch
+            await switchChannel(owner, name, channelName);
+            await loadRepoData();
+            setPath('');
         } catch (err) {
             alert('Failed to switch channel: ' + err.toString());
         }
         setLoading(false);
     };
 
+    const handleToggleProtection = async (channel) => {
+        try {
+            const updatedRepo = await toggleProtection(owner, name, channel);
+            setRepoMeta(updatedRepo);
+        } catch (err) {
+            alert('Failed to toggle protection');
+        }
+    };
+
+    const handleCreatePR = async () => {
+        try {
+            const pr = await createDiscussion(owner, name, { title: newPR.title, description: newPR.description });
+            if (pr.error) {
+                alert('Failed to create discussion: ' + pr.error);
+                return;
+            }
+            setDiscussions([pr, ...discussions]);
+            setIsCreatingPR(false);
+            setNewPR({ title: '', description: '', sourceChannel: '', targetChannel: 'main' });
+        } catch (err) {
+            alert('Failed to create discussion');
+        }
+    };
+
+    const handleAddComment = async (prId) => {
+        if (!commentText.trim()) return;
+        try {
+            const updatedPR = await addComment(owner, name, prId, commentText);
+            if (selectedPR?.id === prId) setSelectedPR(updatedPR);
+            setDiscussions(discussions.map(d => d.id === prId ? updatedPR : d));
+            setCommentText('');
+        } catch (err) {
+            alert('Failed to add comment');
+        }
+    };
+
+    const handleMergePR = async (prId) => {
+        try {
+            await mergeDiscussion(owner, name, prId);
+            const updatedDisc = await fetchDiscussions(owner, name);
+            setDiscussions(updatedDisc);
+            if (selectedPR?.id === prId) setSelectedPR({ ...selectedPR, status: 'merged' });
+            alert('Discussion merged successfully');
+        } catch (err) {
+            alert('Failed to merge: ' + err.toString());
+        }
+    };
+
+
     const handleFork = async () => {
         setForkLoading(true);
         try {
-            const newRepo = await forkRepo(name, name); // Will append -username in backend
+            const newRepo = await forkRepo(owner, name, name);
             if (newRepo.error) {
                 alert('Failed to fork repository: ' + newRepo.error);
             } else {
-                navigate(`/repos/${newRepo.name}`);
+                navigate(`/repos/${newRepo.owner}/${newRepo.name}`);
             }
         } catch (err) {
             alert('Failed to fork repository: ' + err.toString());
@@ -161,8 +234,8 @@ const RepoDetail = () => {
     const showPatch = async (hash) => {
         setLoading(true);
         try {
-            const data = await fetchPatchDetail(name, hash);
-            setPatchDetail(data.patch);
+            const data = await fetchPatchDetail(owner, name, hash, selectedChannel);
+            setPatchDetail({ content: data.patch, hash });
             setTab('patch-detail');
         } catch (err) {
             console.error(err);
@@ -187,18 +260,18 @@ const RepoDetail = () => {
     );
 
     return (
-        <Layout repoName={name} owner={repoMeta?.owner}>
+        <Layout repoName={name} owner={owner}>
             <div className="space-y-6">
                 {/* Repo Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                        <div className="w-12 h-12 rounded-none bg-primary/10 flex items-center justify-center text-primary">
                             <Box className="w-6 h-6" />
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold flex items-center gap-2">
-                                {name}
-                                <span className={`text-2xs px-2 py-0.5 rounded-full border uppercase transition-colors ${
+                                <span className="text-muted-foreground font-normal text-lg">{owner}/</span>{name}
+                                <span className={`text-2xs px-2 py-0.5 rounded-none border uppercase transition-colors ${
                                     repoMeta?.isPrivate 
                                         ? 'bg-muted text-muted-foreground border-border' 
                                         : 'bg-primary/5 text-muted-foreground border-border/50 hover:border-primary/30 hover:text-primary/80'
@@ -227,11 +300,11 @@ const RepoDetail = () => {
                             <DropdownMenuContent align="end" className="w-80">
                                 <DropdownMenuLabel>Clone with SSH</DropdownMenuLabel>
                                 <div className="p-2">
-                                    <div className="flex items-center gap-2 bg-muted p-2 rounded-md border">
+                                    <div className="flex items-center gap-2 bg-muted p-2 rounded-none border">
                                         <code className="text-xs truncate flex-1">
-                                            pijul clone {window.location.hostname}:/{name}
+                                            pijul clone {window.location.hostname}:/{repoMeta?.owner}/{name}
                                         </code>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul clone ${window.location.hostname}:/${name}`)}>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul clone ${window.location.hostname}:/${repoMeta?.owner}/${name}`)}>
                                             <Copy className="w-3 h-3" />
                                         </Button>
                                     </div>
@@ -250,6 +323,9 @@ const RepoDetail = () => {
                         <TabsTrigger value="patches" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-1 py-2 h-auto">
                             <History className="w-4 h-4 mr-2" /> Patches
                         </TabsTrigger>
+                        <TabsTrigger value="discussions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-1 py-2 h-auto">
+                            <MessageSquare className="w-4 h-4 mr-2" /> Discussions
+                        </TabsTrigger>
                         {canManage && (
                             <TabsTrigger value="settings" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-1 py-2 h-auto">
                                 <Settings className="w-4 h-4 mr-2" /> Settings
@@ -267,16 +343,20 @@ const RepoDetail = () => {
                                             <DropdownMenuTrigger asChild>
                                                 <Button variant="outline" size="sm" className="gap-2">
                                                     <GitBranch className="w-4 h-4 text-primary" />
-                                                    {currentChannel}
+                                                    {selectedChannel}
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="start">
-                                                <DropdownMenuLabel>Switch Channel</DropdownMenuLabel>
+                                                <DropdownMenuLabel>View Channel</DropdownMenuLabel>
                                                 <DropdownMenuSeparator />
                                                 {channels.map(c => (
-                                                    <DropdownMenuItem key={c.name} onClick={() => handleSwitchChannel(c.name)} className="flex items-center justify-between">
+                                                    <DropdownMenuItem 
+                                                        key={c.name} 
+                                                        onClick={() => { setSelectedChannel(c.name); setPath(''); setFileContent(null); }} 
+                                                        className="flex items-center justify-between"
+                                                    >
                                                         {c.name}
-                                                        {c.isCurrent && <div className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+                                                        {c.name === selectedChannel && <div className="w-1.5 h-1.5 rounded-none bg-green-500" />}
                                                     </DropdownMenuItem>
                                                 ))}
                                             </DropdownMenuContent>
@@ -297,19 +377,19 @@ const RepoDetail = () => {
                                     </div>
                                 </div>
 
-                                <Card className="overflow-hidden border-border/50">
+                                <Card className="overflow-hidden border-border/50 rounded-none shadow-none">
                                     {loading ? (
                                         <div className="p-12 text-center text-muted-foreground animate-pulse">Loading files...</div>
                                     ) : fileContent !== null ? (
-                                        <div className="bg-card">
-                                            <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50">
-                                                <span className="text-xs font-mono">{path.split('/').pop()}</span>
-                                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setFileContent(null)}>Close</Button>
+                                            <div className="bg-card rounded-none">
+                                                <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/50 rounded-none">
+                                                    <span className="text-xs font-mono">{path.split('/').pop()}</span>
+                                                    <Button variant="ghost" size="sm" className="h-7 text-xs rounded-none" onClick={() => setFileContent(null)}>Close</Button>
+                                                </div>
+                                                <pre className="p-4 text-sm font-mono overflow-auto leading-relaxed rounded-none whitespace-pre min-w-full">
+                                                    <code>{fileContent}</code>
+                                                </pre>
                                             </div>
-                                            <pre className="p-4 text-sm font-mono overflow-auto max-h-[600px] leading-relaxed">
-                                                <code>{fileContent}</code>
-                                            </pre>
-                                        </div>
                                     ) : tree.length === 0 ? (
                                         <div className="p-20 text-center space-y-4">
                                             <Box className="w-12 h-12 mx-auto opacity-20 text-primary" />
@@ -323,27 +403,43 @@ const RepoDetail = () => {
                                             {path && (
                                                 <div 
                                                     className="flex items-center gap-3 p-3 text-sm hover:bg-accent/30 cursor-pointer text-primary font-medium"
-                                                    onClick={() => setPath('')}
+                                                    onClick={() => {
+                                                        const parts = path.split('/').filter(Boolean);
+                                                        parts.pop();
+                                                        setPath(parts.length > 0 ? parts.join('/') + '/' : '');
+                                                    }}
                                                 >
                                                     <ArrowLeft className="w-4 h-4" /> ..
                                                 </div>
                                             )}
-                                            {tree.map(item => (
+
+                                            {tree.map(item => {
+                                                const itemName = typeof item === 'string' ? item : item.path;
+                                                const isDir = typeof item === 'object' ? item.isDir : false;
+                                                return (
                                                 <div 
-                                                    key={item} 
+                                                    key={itemName} 
                                                     className="flex items-center justify-between p-3 hover:bg-accent/30 cursor-pointer group transition-colors"
-                                                    onClick={() => setPath(item)}
+                                                    onClick={() => {
+                                                        const base = path ? (path.endsWith('/') ? path : path + '/') : '';
+                                                        setPath(base + itemName + (isDir ? '/' : ''));
+                                                    }}
                                                 >
                                                     <div className="flex items-center gap-3">
-                                                        <File className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
-                                                        <span className="text-sm font-medium">{item}</span>
+                                                        {isDir ? (
+                                                            <Folder className="w-4 h-4 text-primary group-hover:text-primary/80" />
+                                                        ) : (
+                                                            <File className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                                                        )}
+                                                        <span className="text-sm font-medium">{itemName}</span>
                                                     </div>
                                                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                                         <span className="hidden sm:inline italic opacity-0 group-hover:opacity-100 transition-opacity">Updated recently</span>
                                                         <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100" />
                                                     </div>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </Card>
@@ -362,22 +458,196 @@ const RepoDetail = () => {
                                             <CardHeader className="bg-muted/30 border-b">
                                                 <div className="flex items-center justify-between">
                                                     <CardTitle className="text-lg">Patch Details</CardTitle>
-                                                    <code className="text-2xs bg-accent px-2 py-1 rounded">Hash: {patchDetail?.hash || '...'}</code>
+                                                    {patchDetail?.hash && (
+                                                        <div className="flex items-center gap-2 bg-accent px-2 py-1 rounded">
+                                                            <code 
+                                                                className="text-2xs cursor-help"
+                                                                title={patchDetail.hash}
+                                                            >
+                                                                Hash: {patchDetail.hash.slice(0, 8)}...
+                                                            </code>
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon" 
+                                                                className="h-4 w-4 hover:bg-primary/20" 
+                                                                onClick={() => {
+                                                                    const text = patchDetail.hash;
+                                                                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                                        navigator.clipboard.writeText(text).then(() => {
+                                                                            setCopiedHash(true);
+                                                                            setTimeout(() => setCopiedHash(false), 2000);
+                                                                        });
+                                                                    } else {
+                                                                        const textArea = document.createElement("textarea");
+                                                                        textArea.value = text;
+                                                                        document.body.appendChild(textArea);
+                                                                        textArea.select();
+                                                                        document.execCommand('copy');
+                                                                        document.body.removeChild(textArea);
+                                                                        setCopiedHash(true);
+                                                                        setTimeout(() => setCopiedHash(false), 2000);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {copiedHash ? <CheckCircle2 className="w-2.5 h-2.5 text-green-500" /> : <Copy className="w-2.5 h-2.5" />}
+                                                            </Button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </CardHeader>
                                             <CardContent className="p-0">
-                                                <div className="bg-muted/50 p-6">
-                                                    <pre className="text-sm font-mono text-primary leading-relaxed whitespace-pre-wrap">
-                                                        <code>{patchDetail}</code>
-                                                    </pre>
-                                                </div>
+                                                {patchDetail?.content && typeof patchDetail.content === 'object' ? (
+                                                    <div className="bg-card">
+                                                        <div className="p-6 space-y-8">
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                                <div className="space-y-4">
+                                                                    <div>
+                                                                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                                            <MessageSquare className="w-3 h-3" /> Message
+                                                                        </h3>
+                                                                        <p className="text-lg font-medium leading-snug">{patchDetail.content.message}</p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                                            <Clock className="w-3 h-3" /> Timestamp
+                                                                        </h3>
+                                                                        <p className="text-sm text-muted-foreground">
+                                                                            {new Date(patchDetail.content.timestamp).toLocaleString()}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div>
+                                                                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                                        <Users className="w-3 h-3" /> Author(s)
+                                                                    </h3>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {patchDetail.content.authors?.map(author => (
+                                                                            <code key={author} className="text-[10px] bg-accent/50 border border-border/50 px-2 py-1 rounded-none text-primary font-mono shadow-sm" title={author}>
+                                                                                {author.slice(0, 12)}...
+                                                                            </code>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="space-y-6">
+                                                                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                                                                    <Code className="w-3 h-3" /> Changes ({patchDetail.content.hunks?.length || 0})
+                                                                </h3>
+                                                                <div className="space-y-4">
+                                                                    {patchDetail.content.hunks?.map((hunk, idx) => (
+                                                                        <div key={idx} className="border border-border/50 rounded-none overflow-hidden shadow-sm bg-background">
+                                                                            <div className="bg-muted/30 px-4 py-2.5 border-b border-border/50 flex justify-between items-center">
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <span className={`text-[10px] uppercase font-black px-1.5 py-0.5 rounded ${
+                                                                                        hunk.hunkType === 'Edit' ? 'bg-blue-500/10 text-blue-500' :
+                                                                                        hunk.hunkType === 'Replacement' ? 'bg-orange-500/10 text-orange-500' :
+                                                                                        'bg-primary/10 text-primary'
+                                                                                    }`}>
+                                                                                        {hunk.hunkType}
+                                                                                    </span>
+                                                                                    <span className="text-xs font-mono font-medium text-foreground/80">
+                                                                                        {hunk.path} {hunk.newPath ? `→ ${hunk.newPath}` : ''}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Line {hunk.line}</span>
+                                                                            </div>
+                                                                            <div className="p-0 font-mono text-xs overflow-x-auto">
+                                                                                {hunk.previous && (
+                                                                                    <div className="p-3 bg-muted/10 border-b border-border/5">
+                                                                                        <div className="text-[10px] uppercase font-bold text-muted-foreground/50 mb-1">Context (Previous)</div>
+                                                                                        <pre className="whitespace-pre-wrap opacity-60 italic">{hunk.previous}</pre>
+                                                                                    </div>
+                                                                                )}
+                                                                                {hunk.remove && (
+                                                                                    <div className="p-3 bg-red-500/5 border-b border-border/5">
+                                                                                        <div className="text-[10px] uppercase font-bold text-red-500/50 mb-1">Removed</div>
+                                                                                        <pre className="whitespace-pre-wrap text-red-500/80">{hunk.remove}</pre>
+                                                                                    </div>
+                                                                                )}
+                                                                                {hunk.newData && (
+                                                                                    <div className="p-3 bg-green-500/5 border-b border-border/5">
+                                                                                        <div className="text-[10px] uppercase font-bold text-green-500/50 mb-1">Added</div>
+                                                                                        <pre className="whitespace-pre-wrap text-green-500/80">{hunk.newData}</pre>
+                                                                                    </div>
+                                                                                )}
+                                                                                {hunk.lines && hunk.lines.length > 0 ? (
+                                                                                    <div className="min-w-full divide-y divide-border/5">
+                                                                                        {hunk.lines.map((line, lIdx) => (
+                                                                                            <div key={lIdx} className={`flex group ${
+                                                                                                line.lineType === 'addition' ? 'bg-green-500/5 hover:bg-green-500/10' : 
+                                                                                                line.lineType === 'deletion' ? 'bg-red-500/5 hover:bg-red-500/10' : 
+                                                                                                'hover:bg-accent/5'
+                                                                                            }`}>
+                                                                                                <div className="w-12 shrink-0 text-right pr-4 py-0.5 select-none text-[10px] border-r border-border/10 text-muted-foreground/40 font-light bg-muted/10">
+                                                                                                    {line.lineNumber}
+                                                                                                </div>
+                                                                                                <div className={`w-6 shrink-0 flex justify-center py-0.5 select-none font-bold ${
+                                                                                                    line.lineType === 'addition' ? 'text-green-500' : 
+                                                                                                    line.lineType === 'deletion' ? 'text-red-500' : 
+                                                                                                    'text-muted-foreground/20'
+                                                                                                }`}>
+                                                                                                    {line.lineType === 'addition' ? '+' : line.lineType === 'deletion' ? '-' : ' '}
+                                                                                                </div>
+                                                                                                <pre className="px-4 py-0.5 text-foreground/90 whitespace-pre leading-relaxed">{line.content}</pre>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="p-6 text-center">
+                                                                                        {hunk.contents || hunk.replacementContents ? (
+                                                                                            <div className="space-y-4">
+                                                                                                <div className="text-xs text-muted-foreground italic mb-2 flex items-center justify-center gap-2">
+                                                                                                    <Terminal className="w-3 h-3" /> Binary or large block change
+                                                                                                </div>
+                                                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                                                    {hunk.contents && (
+                                                                                                        <div className="space-y-2">
+                                                                                                            <div className="text-[10px] uppercase font-bold text-red-500/50 text-center">Original</div>
+                                                                                                            <pre className="p-3 bg-red-500/5 border border-red-500/10 rounded-lg text-[10px] overflow-auto max-h-40">
+                                                                                                                {hunk.contents.toString('utf-8').slice(0, 500)}
+                                                                                                                {hunk.contents.length > 500 ? '...' : ''}
+                                                                                                            </pre>
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                    {hunk.replacementContents && (
+                                                                                                        <div className="space-y-2">
+                                                                                                            <div className="text-[10px] uppercase font-bold text-green-500/50 text-center">Replacement</div>
+                                                                                                            <pre className="p-3 bg-green-500/5 border border-green-500/10 rounded-lg text-[10px] overflow-auto max-h-40">
+                                                                                                                {hunk.replacementContents.toString('utf-8').slice(0, 500)}
+                                                                                                                {hunk.replacementContents.length > 500 ? '...' : ''}
+                                                                                                            </pre>
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <p className="text-muted-foreground text-xs italic">No line details available for this change type.</p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="bg-muted/50 p-6">
+                                                        <pre className="text-sm font-mono text-primary leading-relaxed whitespace-pre-wrap">
+                                                            <code>{patchDetail?.content || patchDetail}</code>
+                                                        </pre>
+                                                    </div>
+                                                )}
                                             </CardContent>
                                         </Card>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
                                         {log.length === 0 ? (
-                                            <div className="text-center py-20 border rounded-xl border-dashed">
+                                            <div className="text-center py-20 border rounded-none border-dashed">
                                                 <History className="w-10 h-10 mx-auto opacity-10 mb-4" />
                                                 <p className="text-muted-foreground">No patches found in history.</p>
                                             </div>
@@ -391,21 +661,185 @@ const RepoDetail = () => {
                                                     >
                                                         <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-all">
+                                                                <div className="w-8 h-8 rounded-none bg-accent flex items-center justify-center text-muted-foreground group-hover:text-primary group-hover:bg-primary/10 transition-all">
                                                                     <User className="w-4 h-4" />
                                                                 </div>
                                                                 <div>
                                                                     <div className="font-semibold text-sm line-clamp-1">{patch.message}</div>
                                                                     <div className="flex items-center gap-2 text-2xs text-muted-foreground mt-0.5">
-                                                                        <span className="font-bold text-primary">{patch.author}</span>
+                                                                        <span className="font-bold text-primary">{patch.hash}</span>
                                                                         <span>•</span>
                                                                         <span>{patch.date}</span>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            <code className="text-2xs font-mono bg-accent px-2 py-1 rounded text-muted-foreground">
-                                                                {patch.hash.slice(0, 8)}
+                                                            <code className="text-2xs font-mono bg-accent px-2 py-1 rounded text-muted-foreground" title={patch.author}>
+                                                                {patch.author.slice(0, 8)}
                                                             </code>
+                                                        </CardHeader>
+                                                    </Card>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {/* Discussions Tab */}
+                        {tab === 'discussions' && (
+                            <div className="space-y-6">
+                                {selectedPR ? (
+                                    <div className="space-y-6 animate-in fade-in duration-300">
+                                        <Button variant="ghost" size="sm" onClick={() => setSelectedPR(null)} className="gap-2">
+                                            <ArrowLeft className="w-4 h-4" /> Back to discussions
+                                        </Button>
+                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <h2 className="text-2xl font-bold">{selectedPR.title}</h2>
+                                                <span className={`px-2 py-0.5 rounded-none text-xs font-bold uppercase border ${
+                                                    selectedPR.status === 'merged' ? 'bg-accent/10 text-accent border-accent/20' :
+                                                    selectedPR.status === 'open' ? 'bg-primary/10 text-primary border-primary/20' :
+                                                    'bg-muted text-muted-foreground border-border'
+                                                }`}>
+                                                    {selectedPR.status}
+                                                </span>
+                                            </div>
+                                            {canManage && selectedPR.status === 'open' && (
+                                                <Button onClick={() => handleMergePR(selectedPR.id)} className="bg-primary text-primary-foreground">
+                                                    <CheckCircle2 className="w-4 h-4 mr-2" /> Merge Discussion
+                                                </Button>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground border-b pb-4">
+                                            <span className="font-bold text-primary">{selectedPR.author}</span>
+                                            <span>wants to merge</span>
+                                            <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">{selectedPR.sourceChannel}</span>
+                                            <span>into</span>
+                                            <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">{selectedPR.targetChannel}</span>
+                                        </div>
+
+                                        <Card className="border-border/50">
+                                            <CardContent className="pt-6">
+                                                <p className="whitespace-pre-wrap text-sm leading-relaxed">{selectedPR.description}</p>
+                                            </CardContent>
+                                        </Card>
+
+                                        {selectedPR.status === 'open' && (
+                                            <div className="bg-primary/5 border border-primary/20 rounded-none p-4 space-y-3">
+                                                <h4 className="text-sm font-bold flex items-center gap-2">
+                                                    <Terminal className="w-4 h-4" /> How to contribute to this discussion
+                                                </h4>
+                                                <p className="text-xs text-muted-foreground">
+                                                    You can push your patches directly to this discussion's channel. 
+                                                    Your changes will appear here as part of the discussion.
+                                                </p>
+                                                <div className="bg-background border rounded-none p-2 flex items-center justify-between">
+                                                    <code className="text-[10px] font-mono text-primary">
+                                                        pijul push {window.location.hostname}:/{repoMeta?.owner}/{name} --to-channel pr-{selectedPR.id}
+                                                    </code>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul push ${window.location.hostname}:/${repoMeta?.owner}/${name} --to-channel pr-${selectedPR.id}`)}>
+                                                        <Copy className="w-3 h-3" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-4">
+                                            <h3 className="font-bold flex items-center gap-2">
+                                                <MessageSquare className="w-4 h-4" /> Comments
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {selectedPR.comments.map(c => (
+                                                    <div key={c.id} className="bg-muted/30 border rounded-none p-4">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <span className="font-bold text-sm">{c.author}</span>
+                                                            <span className="text-[10px] text-muted-foreground">{new Date(c.createdAt).toLocaleString()}</span>
+                                                        </div>
+                                                        <p className="text-sm">{c.text}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="space-y-3 pt-4">
+                                                <textarea 
+                                                    className="w-full bg-background border rounded-none p-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary min-h-[100px]"
+                                                    placeholder="Leave a comment..."
+                                                    value={commentText}
+                                                    onChange={(e) => setCommentText(e.target.value)}
+                                                />
+                                                <div className="flex justify-end">
+                                                    <Button onClick={() => handleAddComment(selectedPR.id)} disabled={!commentText.trim()} size="sm">
+                                                        Comment
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : isCreatingPR ? (
+                                    <div className="max-w-2xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+                                        <h2 className="text-2xl font-bold">New Discussion / PR</h2>
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium">Title</label>
+                                                <Input 
+                                                    placeholder="e.g. Add authentication feature" 
+                                                    value={newPR.title}
+                                                    onChange={(e) => setNewPR({ ...newPR, title: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium">Description</label>
+                                                <textarea 
+                                                    className="w-full bg-background border rounded-none p-3 text-sm min-h-[150px] focus:outline-none focus:ring-1 focus:ring-primary"
+                                                    placeholder="What changes are you proposing? Explain why."
+                                                    value={newPR.description}
+                                                    onChange={(e) => setNewPR({ ...newPR, description: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="flex gap-2 justify-end">
+                                                <Button variant="ghost" onClick={() => setIsCreatingPR(false)}>Cancel</Button>
+                                                <Button onClick={handleCreatePR} disabled={!newPR.title}>Create Discussion</Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h2 className="text-xl font-bold">Discussions</h2>
+                                            <Button size="sm" onClick={() => setIsCreatingPR(true)}>
+                                                New Discussion
+                                            </Button>
+                                        </div>
+                                        {discussions.length === 0 ? (
+                                            <div className="p-20 text-center border-2 border-dashed rounded-none space-y-3">
+                                                <MessageSquare className="w-12 h-12 mx-auto opacity-20 text-primary" />
+                                                <h3 className="text-lg font-semibold">No discussions yet</h3>
+                                                <p className="text-sm text-muted-foreground">Submit your first PR to request changes.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid gap-3">
+                                                {discussions.map(disc => (
+                                                    <Card 
+                                                        key={disc.id} 
+                                                        className="hover:border-primary/50 transition-all hover:translate-x-1 cursor-pointer" 
+                                                        onClick={() => setSelectedPR(disc)}
+                                                    >
+                                                        <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-8 h-8 rounded-none flex items-center justify-center ${
+                                                                    disc.status === 'merged' ? 'bg-accent/10 text-accent' : 'bg-primary/10 text-primary'
+                                                                }`}>
+                                                                    {disc.status === 'merged' ? <ArrowUpCircle className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-bold text-sm">{disc.title}</div>
+                                                                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                                                                        #{disc.id.slice(-4)} opened by {disc.author}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-[10px] font-bold uppercase px-2 py-0.5 border rounded-none">
+                                                                {disc.status}
+                                                            </div>
                                                         </CardHeader>
                                                     </Card>
                                                 ))}
@@ -431,16 +865,24 @@ const RepoDetail = () => {
                                         </CardHeader>
                                         <CardContent>
                                             <div className="space-y-4">
-                                                <div className="flex items-center gap-4">
+                                                <div className="flex items-center gap-2">
                                                     <Input 
                                                         placeholder="Username to invite..." 
                                                         value={newCollab}
                                                         onChange={(e) => setNewCollab(e.target.value)}
                                                         className="max-w-xs"
                                                     />
+                                                    <select 
+                                                        className="h-10 bg-background border rounded-none px-3 text-sm focus:ring-1 focus:ring-primary outline-none"
+                                                        value={newCollabRole}
+                                                        onChange={(e) => setNewCollabRole(e.target.value)}
+                                                    >
+                                                        <option value="developer">Developer</option>
+                                                        <option value="maintainer">Maintainer</option>
+                                                    </select>
                                                     <Button 
                                                         onClick={() => {
-                                                            addCollaborator(name, newCollab, 'developer').then((res) => {
+                                                            addCollaborator(owner, name, newCollab, newCollabRole).then((res) => {
                                                                 if (res.error) {
                                                                     alert('Failed to add user: ' + res.error);
                                                                 } else {
@@ -456,11 +898,11 @@ const RepoDetail = () => {
                                                         Add User
                                                     </Button>
                                                 </div>
-                                                <div className="border border-border/50 rounded-md divide-y divide-border/50">
+                                                <div className="border border-border/50 rounded-none divide-y divide-border/50">
                                                     {repoMeta?.collaborators?.map(c => (
                                                         <div key={c.username} className="flex items-center justify-between p-3">
                                                             <div className="flex items-center gap-3">
-                                                                <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
+                                                                <div className="w-8 h-8 rounded-none bg-accent flex items-center justify-center">
                                                                     <User className="w-4 h-4 text-muted-foreground" />
                                                                 </div>
                                                                 <div>
@@ -473,7 +915,7 @@ const RepoDetail = () => {
                                                                 size="sm" 
                                                                 className="text-destructive hover:bg-destructive/10"
                                                                 onClick={() => {
-                                                                    removeCollaborator(name, c.username).then((res) => {
+                                                                    removeCollaborator(owner, name, c.username).then((res) => {
                                                                         if (res.error) alert('Failed: ' + res.error);
                                                                         else loadRepoData();
                                                                     }).catch(err => alert('Error: ' + err.message));
@@ -493,6 +935,52 @@ const RepoDetail = () => {
                                         </CardContent>
                                     </Card>
                                 </section>
+                                <section className="space-y-4">
+                                    <div className="flex items-center gap-2 pb-2 border-b">
+                                        <Lock className="w-5 h-5 text-primary" />
+                                        <h2 className="text-xl font-bold">Branch Protection</h2>
+                                    </div>
+                                    <Card className="border-border/50">
+                                        <CardHeader>
+                                            <CardTitle className="text-base">Protected Channels</CardTitle>
+                                            <CardDescription>
+                                                Protecting a channel prevents non-maintainers from pushing directly. They must use Discussions/PRs to propose changes.
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="border border-border/50 rounded-none divide-y divide-border/50">
+                                                {channels.map(c => (
+                                                    <div key={c.name} className="flex items-center justify-between p-4 transition-colors hover:bg-accent/5">
+                                                        <div className="flex items-center gap-3">
+                                                            {repoMeta?.protectedChannels?.includes(c.name) ? 
+                                                                <Lock className="w-4 h-4 text-primary" /> : 
+                                                                <Unlock className="w-4 h-4 text-muted-foreground" />
+                                                            }
+                                                            <div>
+                                                                <div className="font-mono text-sm font-bold">{c.name}</div>
+                                                                {c.isCurrent && <span className="text-[10px] text-primary uppercase font-bold">Current</span>}
+                                                            </div>
+                                                        </div>
+                                                        <Button 
+                                                            variant={repoMeta?.protectedChannels?.includes(c.name) ? "destructive" : "outline"}
+                                                            size="sm"
+                                                            onClick={() => handleToggleProtection(c.name)}
+                                                            className="h-8"
+                                                        >
+                                                            {repoMeta?.protectedChannels?.includes(c.name) ? "Unprotect" : "Protect"}
+                                                        </Button>
+                                                    </div>
+                                                ))}
+                                                {channels.length === 0 && (
+                                                    <div className="p-4 text-center text-sm text-muted-foreground">
+                                                        No channels found.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </section>
+
 
                                 {userRole === 'owner' && (
                                     <section className="space-y-4">
@@ -517,7 +1005,7 @@ const RepoDetail = () => {
                                                     disabled={deleteConfirm !== name || deleteLoading}
                                                     onClick={() => {
                                                         setDeleteLoading(true);
-                                                        deleteRepo(name).then(() => navigate('/'));
+                                                        deleteRepo(owner, name).then(() => navigate('/'));
                                                     }}
                                                 >
                                                     {deleteLoading ? 'Deleting...' : 'Delete Repository'}
