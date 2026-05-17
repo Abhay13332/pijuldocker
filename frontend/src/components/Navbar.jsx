@@ -22,7 +22,7 @@ const Navbar = () => {
                         PijulServ
                     </Link>
                     
-                    <div className="flex items-center bg-background border border-border rounded-md px-3 py-1 w-[280px]">
+                    <div className="flex items-center bg-background border border-border rounded-md px-3 py-1 w-70">
                         <Search size={16} className="text-muted-foreground" />
                         <input 
                             type="text" 

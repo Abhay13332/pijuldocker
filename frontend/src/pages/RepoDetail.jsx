@@ -17,7 +17,10 @@ import {
   createDiscussion,
   addComment,
   mergeDiscussion,
-  toggleProtection
+  closeDiscussion,
+  deleteDiscussion,
+  toggleProtection,
+  getMergeConflicts
 } from '../api';
 import { 
   File, 
@@ -46,7 +49,10 @@ import {
   MessageSquare,
   ArrowUpCircle,
   CheckCircle2,
-  Unlock
+  Unlock,
+  Plus,
+  Minus,
+  XCircle
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
@@ -61,6 +67,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from '../components/ui/dropdown-menu';
+import ConflictsBox from '../components/repo/conflicts';
 
 const RepoDetail = () => {
     const { owner, name, tab: urlTab } = useParams();
@@ -91,6 +98,8 @@ const RepoDetail = () => {
     const [newCollab, setNewCollab] = useState('');
     const [newCollabRole, setNewCollabRole] = useState('developer');
     const [discussions, setDiscussions] = useState([]);
+    const [conflicts,setConflicts]=useState(null);
+    
     const [selectedPR, setSelectedPR] = useState(null);
     const [isCreatingPR, setIsCreatingPR] = useState(false);
     const [newPR, setNewPR] = useState({ title: '', description: '', sourceChannel: '', targetChannel: 'main' });
@@ -99,7 +108,7 @@ const RepoDetail = () => {
     const [copiedHash, setCopiedHash] = useState(false);
 
     const currentUsername = localStorage.getItem('username');
-
+    const hasConflicts=conflicts!=null && conflicts.length!=0;
     useEffect(() => {
         loadRepoData();
     }, [name]);
@@ -116,6 +125,7 @@ const RepoDetail = () => {
                 ? reposData.find(r => r.name === name && r.owner === owner)
                 : null;
             setRepoMeta(meta);
+            
             setChannels(Array.isArray(channelsData) ? channelsData : []);
         } catch (err) {
             console.error('Failed to load repo data:', err);
@@ -178,7 +188,11 @@ const RepoDetail = () => {
 
     const handleCreatePR = async () => {
         try {
-            const pr = await createDiscussion(owner, name, { title: newPR.title, description: newPR.description });
+            const pr = await createDiscussion(owner, name, {
+                title: newPR.title,
+                description: newPR.description,
+                targetChannel: newPR.targetChannel || 'main'
+            });
             if (pr.error) {
                 alert('Failed to create discussion: ' + pr.error);
                 return;
@@ -204,7 +218,11 @@ const RepoDetail = () => {
     };
 
     const handleMergePR = async (prId) => {
+        if(conflicts.length>0){
+            if(!confirm("there are merge conflict ,do you still want to merge(resolve later)")) return;
+        }
         try {
+
             await mergeDiscussion(owner, name, prId);
             const updatedDisc = await fetchDiscussions(owner, name);
             setDiscussions(updatedDisc);
@@ -215,6 +233,45 @@ const RepoDetail = () => {
         }
     };
 
+    const handleClosePR = async (prId) => {
+        if (!confirm('Close this discussion? The branch will be permanently deleted — no further push/pull will be possible.')) return;
+        try {
+            const res = await closeDiscussion(owner, name, prId);
+            if (res.error) { alert('Error: ' + res.error); return; }
+            const updatedDisc = await fetchDiscussions(owner, name);
+            setDiscussions(updatedDisc);
+            if (selectedPR?.id === prId) setSelectedPR({ ...selectedPR, status: 'closed' });
+        } catch (err) { alert('Close failed: ' + err.toString()); }
+    };
+
+    const handleDeletePR = async (prId) => {
+        if (!confirm('Permanently delete this discussion? The branch will be removed and the record will be gone forever.')) return;
+        try {
+            const res = await deleteDiscussion(owner, name, prId);
+            if (res.error) { alert('Error: ' + res.error); return; }
+            setSelectedPR(null);
+            const updatedDisc = await fetchDiscussions(owner, name);
+            setDiscussions(updatedDisc);
+        } catch (err) { alert('Delete failed: ' + err.toString()); }
+    };
+    const showConflictsPR = async(prId) =>{
+        setLoading(true);
+        try{
+            const res=await getMergeConflicts(owner,name,prId);
+            console.log(res);
+            if (res.error) { alert('Error: ' + res.error); return; }
+            if(res.isconflicts){
+                console.log(res.conflicts)
+                setConflicts(res.conflicts);
+                
+            }else{
+                setConflicts(null);
+            }
+        }catch (err) {
+            console.error(err);
+        }
+        setLoading(false);
+    }
 
     const handleFork = async () => {
         setForkLoading(true);
@@ -242,7 +299,7 @@ const RepoDetail = () => {
         }
         setLoading(false);
     };
-
+    
     const userRole = repoMeta?.owner === currentUsername ? 'owner' :
                      repoMeta?.collaborators?.find(c => c.username === currentUsername)?.role || 'viewer';
     const canManage = ['owner', 'maintainer'].includes(userRole);
@@ -302,9 +359,9 @@ const RepoDetail = () => {
                                 <div className="p-2">
                                     <div className="flex items-center gap-2 bg-muted p-2 rounded-none border">
                                         <code className="text-xs truncate flex-1">
-                                            pijul clone {window.location.hostname}:/{repoMeta?.owner}/{name}
+                                            pijul clone {currentUsername}@{window.location.hostname}:/{repoMeta?.owner}/{name} --channel {selectedChannel}
                                         </code>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul clone ${window.location.hostname}:/${repoMeta?.owner}/${name}`)}>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul clone ${currentUsername}@${window.location.hostname}:/${repoMeta?.owner}/${name}  --channel ${selectedChannel}`)}>
                                             <Copy className="w-3 h-3" />
                                         </Button>
                                     </div>
@@ -704,10 +761,23 @@ const RepoDetail = () => {
                                                     {selectedPR.status}
                                                 </span>
                                             </div>
-                                            {canManage && selectedPR.status === 'open' && (
-                                                <Button onClick={() => handleMergePR(selectedPR.id)} className="bg-primary text-primary-foreground">
-                                                    <CheckCircle2 className="w-4 h-4 mr-2" /> Merge Discussion
-                                                </Button>
+                                            {canManage && (
+                                                <div className="flex items-center gap-2">
+                                                    {selectedPR.status === 'open' && (<>
+                                                        <Button onClick={() => handleMergePR(selectedPR.id)} className={`bg-primary text-primary-foreground ${(hasConflicts) 
+                                                               ? 'bg-muted text-muted-foreground cursor-not-allowed opacity-70' 
+                                                               : 'bg-primary text-primary-foreground hover:opacity-90 cursor-pointer shadow-sm'
+                                                             }`}>
+                                                            <CheckCircle2 className={`w-4 h-4 mr-2 `} /> Merge Discussion
+                                                        </Button>
+                                                        <Button variant="outline" onClick={() => handleClosePR(selectedPR.id)} className="border-primary text-primary hover:bg-orange-500/10">
+                                                            <XCircle className="w-4 h-4 mr-2" /> Close Discussion
+                                                        </Button>
+                                                    </>)}
+                                                    <Button variant="outline " onClick={() => handleDeletePR(selectedPR.id)} className="border-destructive/50 text-destructive hover:bg-destructive/10">
+                                                        <Trash2 className=" relative h-4" /> 
+                                                    </Button>
+                                                </div>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2 text-sm text-muted-foreground border-b pb-4">
@@ -735,7 +805,7 @@ const RepoDetail = () => {
                                                 </p>
                                                 <div className="bg-background border rounded-none p-2 flex items-center justify-between">
                                                     <code className="text-[10px] font-mono text-primary">
-                                                        pijul push {window.location.hostname}:/{repoMeta?.owner}/{name} --to-channel pr-{selectedPR.id}
+                                                        pijul push {currentUsername}@{window.location.hostname}:/{repoMeta?.owner}/{name} --to-channel pr-{selectedPR.id}
                                                     </code>
                                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul push ${window.location.hostname}:/${repoMeta?.owner}/${name} --to-channel pr-${selectedPR.id}`)}>
                                                         <Copy className="w-3 h-3" />
@@ -743,6 +813,9 @@ const RepoDetail = () => {
                                                 </div>
                                             </div>
                                         )}
+                                         {/* conflicts st */}
+                                       {conflicts &&  <ConflictsBox conflicts={conflicts} source={selectedPR.sourceChannel} target={selectedPR.targetChannel}></ConflictsBox>}
+                                         {/* conflicts end*/}
 
                                         <div className="space-y-4">
                                             <h3 className="font-bold flex items-center gap-2">
@@ -795,6 +868,19 @@ const RepoDetail = () => {
                                                     onChange={(e) => setNewPR({ ...newPR, description: e.target.value })}
                                                 />
                                             </div>
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium">Merge into (Target Branch)</label>
+                                                <select
+                                                    className="w-full h-10 bg-background border rounded-none px-3 text-sm focus:ring-1 focus:ring-primary outline-none"
+                                                    value={newPR.targetChannel}
+                                                    onChange={(e) => setNewPR({ ...newPR, targetChannel: e.target.value })}
+                                                >
+                                                    {channels.map(c => (
+                                                        <option key={c.name} value={c.name}>{c.name}{c.isCurrent ? ' (current)' : ''}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-xs text-muted-foreground">The branch your changes will be merged into when this discussion is accepted.</p>
+                                            </div>
                                             <div className="flex gap-2 justify-end">
                                                 <Button variant="ghost" onClick={() => setIsCreatingPR(false)}>Cancel</Button>
                                                 <Button onClick={handleCreatePR} disabled={!newPR.title}>Create Discussion</Button>
@@ -821,7 +907,7 @@ const RepoDetail = () => {
                                                     <Card 
                                                         key={disc.id} 
                                                         className="hover:border-primary/50 transition-all hover:translate-x-1 cursor-pointer" 
-                                                        onClick={() => setSelectedPR(disc)}
+                                                        onClick={() =>{ setSelectedPR(disc),showConflictsPR(disc.id)}}
                                                     >
                                                         <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
                                                             <div className="flex items-center gap-3">
@@ -948,8 +1034,9 @@ const RepoDetail = () => {
                                             </CardDescription>
                                         </CardHeader>
                                         <CardContent>
+
                                             <div className="border border-border/50 rounded-none divide-y divide-border/50">
-                                                {channels.map(c => (
+                                                {channels.sort((a,b)=>a.name.localeCompare(b.name)).map(c => (
                                                     <div key={c.name} className="flex items-center justify-between p-4 transition-colors hover:bg-accent/5">
                                                         <div className="flex items-center gap-3">
                                                             {repoMeta?.protectedChannels?.includes(c.name) ? 

@@ -15,6 +15,9 @@
 use napi_derive::napi;
 use std::path::Path;
 
+mod merge_conflicts;
+pub use merge_conflicts::*;
+
 use libpijul::{
     change::get_change_contents,
     changestore::{filesystem::FileSystem, ChangeStore},

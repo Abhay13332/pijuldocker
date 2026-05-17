@@ -579,7 +579,8 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { getChangeDetails, getFileContent, getRepositoryFiles } = nativeBinding
+const { getChangeDetails, getFileContent, getMergeConflicts, getRepositoryFiles } = nativeBinding
 export { getChangeDetails }
 export { getFileContent }
+export { getMergeConflicts }
 export { getRepositoryFiles }

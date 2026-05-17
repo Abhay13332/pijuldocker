@@ -162,6 +162,7 @@ app.get('/api/repos/:owner/:name/blob', optionalAuthenticateToken, checkRepoAcce
     }
 });
 
+
 app.get('/api/repos/:owner/:name/patches/:hash', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
         const patch = await pijul.getPatch(req.repo.owner, req.repo.name, req.params.hash, req.query.channel);
@@ -254,9 +255,9 @@ app.get('/api/repos/:owner/:name/discussions', optionalAuthenticateToken, checkR
 });
 
 app.post('/api/repos/:owner/:name/discussions', authenticateToken, checkRepoAccess('read'), async (req, res) => {
-    const { title, description } = req.body;
+    const { title, description, targetChannel } = req.body;
     try {
-        const pr = discussionStore.create(req.repo.owner, req.repo.name, title, description, req.user.username);
+        const pr = discussionStore.create(req.repo.owner, req.repo.name, title, description, req.user.username, null, targetChannel || 'main');
         await pijul.createChannel(req.repo.owner, req.repo.name, `pr-${pr.id}`);
         res.json(pr);
     } catch (error) {
@@ -282,13 +283,71 @@ app.post('/api/repos/:owner/:name/discussions/:id/comments', authenticateToken, 
 
 app.post('/api/repos/:owner/:name/discussions/:id/merge', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
     const pr = discussionStore.getById(req.repo.owner, req.repo.name, req.params.id);
+    
+    if (!pr) return res.status(404).json({ error: 'Discussion not found' });
+
+    if (pr.status !== 'open') return res.status(400).json({ error: 'Already merged or closed' });
+     
+    try {
+        await pijul.pullChannel(req.repo.owner, req.repo.name, pr.sourceChannel, pr.targetChannel);
+        
+        discussionStore.updateStatus(req.params.id, 'merged');
+
+        // Delete the source branch after merging
+        try { await pijul.deleteChannel(req.repo.owner, req.repo.name, pr.sourceChannel); } catch (_) {}
+        res.json({ message: 'Merged successfully' });
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ error: error.toString() });
+    }
+});
+//get merge conflicts in discussion
+app.post('/api/repos/:owner/:name/discussions/:id/mergeconflicts',authenticateToken,checkRepoAccess('read'),async (req,res) => {
+    const pr = discussionStore.getById(req.repo.owner, req.repo.name, req.params.id);
+    if(!pr) return res.status(404).json({ error: 'Discussion not found' });
+    if (pr.status !== 'open') return res.status(400).json({ error: 'Already merged or closed' });
+    try{
+        let conflicts=await pijul.getMergeconflictinfo(req.repo.owner,req.repo.name,pr.sourceChannel,pr.targetChannel);
+        console.log(conflicts)
+        if(conflicts.length==0){
+            res.json({'isconflicts':false})
+        }else{
+            res.json({'isconflicts':true,conflicts:conflicts});
+        }
+    }catch{
+        res.status(500).json({ error: error.toString() });
+    }
+
+})
+// Close a discussion (marks closed + deletes branch, no merge)
+app.post('/api/repos/:owner/:name/discussions/:id/close', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
+    const pr = discussionStore.getById(req.repo.owner, req.repo.name, req.params.id);
     if (!pr) return res.status(404).json({ error: 'Discussion not found' });
     if (pr.status !== 'open') return res.status(400).json({ error: 'Already merged or closed' });
 
     try {
-        await pijul.pullChannel(req.repo.owner, req.repo.name, pr.sourceChannel, pr.targetChannel);
-        discussionStore.updateStatus(req.params.id, 'merged');
-        res.json({ message: 'Merged successfully' });
+        discussionStore.updateStatus(req.params.id, 'closed');
+        try { await pijul.deleteChannel(req.repo.owner, req.repo.name, pr.sourceChannel); } catch (_) {}
+        res.json({ message: 'Discussion closed and branch deleted' });
+    } catch (error) {
+        res.status(500).json({ error: error.toString() });
+    }
+});
+
+// Delete a discussion entirely (removes record + deletes branch)
+app.delete('/api/repos/:owner/:name/discussions/:id', authenticateToken, checkRepoAccess('manage'), async (req, res) => {
+    const pr = discussionStore.getById(req.repo.owner, req.repo.name, req.params.id);
+    if (!pr) return res.status(404).json({ error: 'Discussion not found' });
+
+    try {
+        // Remove from store
+        const data = discussionStore.getAll().filter(
+            d => !(d.owner === req.repo.owner && d.repoName === req.repo.name && d.id === req.params.id)
+        );
+        discussionStore.saveAll(data);
+        // Delete the branch
+        try { await pijul.deleteChannel(req.repo.owner, req.repo.name, pr.sourceChannel); } catch (_) {}
+        res.json({ message: 'Discussion deleted and branch removed' });
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }

@@ -183,6 +183,28 @@ export const mergeDiscussion = async (owner, repoName, id) => {
     });
     return res.json();
 };
+export const getMergeConflicts =async (owner,repoName,id)=>{
+     const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions/${id}/mergeconflicts`, {
+        method: 'POST',
+        headers: getHeaders()
+    });
+    return res.json();
+}
+export const closeDiscussion = async (owner, repoName, id) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions/${id}/close`, {
+        method: 'POST',
+        headers: getHeaders()
+    });
+    return res.json();
+};
+
+export const deleteDiscussion = async (owner, repoName, id) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+    });
+    return res.json();
+};
 
 export const toggleProtection = async (owner, repoName, channel) => {
     const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/protected-channels/toggle`, {

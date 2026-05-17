@@ -8,6 +8,16 @@ export interface ChangeDetails {
   hunks: Array<HunkDetails>
 }
 
+export interface ConflictInfo {
+  conflictType: string
+  path: string
+  line?: number
+  changes: Array<string>
+  content?: string
+  contentA?: string
+  contentB?: string
+}
+
 export interface DiffLine {
   lineNumber: number
   content: string
@@ -35,6 +45,13 @@ export declare function getChangeDetails(repoPath: string, changeHash: string, c
  * Returns a `Buffer` containing the file contents (including any conflict markers).
  */
 export declare function getFileContent(repoPath: string, channelName: string | undefined | null, filePath: string): Buffer
+
+/**
+ * High-level API: Get merge conflicts when applying changes from branch_a to branch_b.
+ *
+ * This does NOT modify the repository. It simulates the merge in a temporary channel.
+ */
+export declare function getMergeConflicts(repoPath: string, branchA: string, branchB: string): Array<ConflictInfo>
 
 /**
  * High-level API: List files in a Pijul repository for a given channel and path prefix.

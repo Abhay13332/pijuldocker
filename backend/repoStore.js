@@ -79,7 +79,8 @@ const repoStore = {
 
         const levels = {
             'read': ['owner', 'maintainer', 'developer', 'viewer'],
-            'write': ['owner', 'maintainer', 'developer'],
+            'unprotectedwrite':['owner', 'maintainer', 'developer'],
+            'allwrite': ['owner', 'maintainer'],
             'manage': ['owner', 'maintainer'],
             'delete': ['owner']
         };

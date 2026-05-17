@@ -103,12 +103,12 @@ const Layout = ({ children, repoName, owner }) => {
                 to={`/repos/${repoBase}/patches`} 
                 active={location.pathname.startsWith(`/repos/${repoBase}/patches`)} 
               />
-              <SidebarItem 
+             {(owner ==username)&& <SidebarItem 
                 icon={Settings} 
                 label="Settings" 
                 to={`/repos/${repoBase}/settings`} 
                 active={location.pathname.startsWith(`/repos/${repoBase}/settings`)} 
-              />
+              />}
             </div>
           )}
         </nav>

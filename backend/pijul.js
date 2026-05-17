@@ -20,6 +20,7 @@ function runPijul(owner, repoName, args) {
 }
 
 const pijul = {
+
     async listRepos() {
         if (!fs.existsSync(REPOS_PATH)) {
             fs.mkdirSync(REPOS_PATH, { recursive: true });
@@ -101,6 +102,17 @@ const pijul = {
             throw new Error('File not found or unreadable');
         }
     },
+    async getMergeconflictinfo(owner,repoName,sourcechannel,targetchannel='main'){
+        const repoPath = path.join(REPOS_PATH, owner, repoName);
+        const { getMergeConflicts} = await import('./pijul-reader/index.js')
+        try {
+            conflicts=getMergeConflicts(repoPath,sourcechannel,targetchannel);
+        
+            return conflicts; 
+        }catch(e){
+            throw new Error("merge conflict detection failed");
+        }
+    },
 
     async getPatch(owner, repoName, hash, channel = 'main') {
         const repoPath = path.join(REPOS_PATH, owner, repoName);
@@ -149,11 +161,15 @@ const pijul = {
 
     async pullChannel(owner, repoName, fromChannel, toChannel) {
         // In Pijul: pijul pull --from-channel from --channel target
-        return runPijul(owner, repoName, `pull --from-channel ${fromChannel} --channel ${toChannel} --all`);
+        return runPijul(owner, repoName, `pull --from-channel ${fromChannel} --to-channel ${toChannel} --all .`);
     },
 
     async createChannel(owner, repoName, channelName) {
         return runPijul(owner, repoName, `channel new ${channelName}`);
+    },
+
+    async deleteChannel(owner, repoName, channelName) {
+        return runPijul(owner, repoName, `channel delete ${channelName}`);
     }
 };
 
