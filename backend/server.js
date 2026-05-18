@@ -308,7 +308,6 @@ app.post('/api/repos/:owner/:name/discussions/:id/mergeconflicts',authenticateTo
     if (pr.status !== 'open') return res.status(400).json({ error: 'Already merged or closed' });
     try{
         let conflicts=await pijul.getMergeconflictinfo(req.repo.owner,req.repo.name,pr.sourceChannel,pr.targetChannel);
-        console.log(conflicts)
         if(conflicts.length==0){
             res.json({'isconflicts':false})
         }else{

@@ -218,7 +218,7 @@ const RepoDetail = () => {
     };
 
     const handleMergePR = async (prId) => {
-        if(conflicts.length>0){
+        if(conflicts!=null && conflicts.length>0){
             if(!confirm("there are merge conflict ,do you still want to merge(resolve later)")) return;
         }
         try {
