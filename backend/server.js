@@ -139,7 +139,6 @@ const checkRepoAccess =  (level) => async(req, res, next) => {
     const username = req.user ? req.user.username : null;
     const repo =await  repoStore.getByOwnerAndName(owner, repoName);
     if (!repo) return res.status(404).json({ error: `Repository '${owner}/${repoName}' not found` });
-    console.log(repo);
     req.repo = repo;
     if (await repoStore.canAccess(owner, repoName, username, level,repo.id)) {
         next();
@@ -186,7 +185,6 @@ app.get('/api/repos/public',authenticateToken,async(req,res)=>{
     }
 });//ok
 app.get('/api/repo/:owner/:name/meta' ,optionalAuthenticateToken,checkRepoAccess('read'),async(req,res)=>{
-    console.log(req.repo);
     res.json(req.repo);
 });
 //ok
@@ -196,7 +194,6 @@ app.post('/api/repos', authenticateToken, async (req, res) => {
     try {
         await pijul.initRepo(req.user.username, name);
         const repo =await  repoStore.create(name, req.user.username, isPrivate);
-        console.log(repo);
         res.json(repo);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
