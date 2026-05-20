@@ -157,8 +157,34 @@ app.get('/api/repos', optionalAuthenticateToken, async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.toString() })``;
     }
-});
-//ok
+});//ok
+app.get('/api/repos/personal',authenticateToken,async(req,res)=>{
+     try {
+        const username = req.user ? req.user.username : null;
+        const repoPage = await repoStore.getPersonalRepos(username,req.query.page,req.query.limit);
+        res.json(repoPage);
+    } catch (error) {
+        res.status(500).json({ error: error.toString() })``;
+    }
+});//ok
+app.get('/api/repos/collaborators',authenticateToken,async(req,res)=>{
+     try {
+        const username = req.user ? req.user.username : null;
+        const repoPage = await repoStore.getCollabRepos(username,req.query.page,req.query.limit);
+        res.json(repoPage);
+    } catch (error) {
+        res.status(500).json({ error: error.toString() })``;
+    }
+});//ok
+app.get('/api/repos/public',authenticateToken,async(req,res)=>{
+     try {
+        const username = req.user ? req.user.username : null;
+        const repoPage = await repoStore.getPublicRepos(username,req.query.page,req.query.limit);
+        res.json(repoPage);
+    } catch (error) {
+        res.status(500).json({ error: error.toString() })``;
+    }
+});//ok
 app.get('/api/repo/:owner/:name/meta' ,optionalAuthenticateToken,checkRepoAccess('read'),async(req,res)=>{
     console.log(req.repo);
     res.json(req.repo);
@@ -181,8 +207,10 @@ app.post('/api/repos', authenticateToken, async (req, res) => {
 app.get('/api/repos/:owner/:name/log', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
     try {
         const channel = req.query.channel || 'main';
-        const log = await pijul.getLog(req.repo.owner, req.repo.name, channel);
-        res.json(log);
+        const page=req.query.page||1;
+        const limit=req.query.limit||10;
+        const logData = await pijul.getLog(req.repo.owner, req.repo.name, channel,page,limit);
+        res.json(logData);
     } catch (error) {
         res.status(500).json({ error: error.toString() });
     }
@@ -316,7 +344,9 @@ app.post('/api/repos/:owner/:name/protected-channels/toggle', authenticateToken,
 
 // Discussions / PRs
 app.get('/api/repos/:owner/:name/discussions', optionalAuthenticateToken, checkRepoAccess('read'), async (req, res) => {
-    const discussions =await discussionStore.getByRepo(req.repo.owner, req.repo.name);
+    const page=req.query.page||1;
+    const limit=req.query.limit||10;
+    const discussions =await discussionStore.getByRepo(req.repo.owner, req.repo.name,page,limit);
     res.json(discussions);
 });
 

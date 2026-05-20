@@ -52,15 +52,16 @@ const discussionStore = {
     };
 },
 
-    async getByRepo(owner, repoName) {
+    async getByRepo(owner, repoName,page,limit) {
+        const offset=(page-1)*limit;
     const result = await pool.query(
         `SELECT id, status, title, author
          FROM discussions
          WHERE owner = $1 AND repo_name = $2
-         ORDER BY created_at DESC`,
-        [owner, repoName]
+         ORDER BY created_at DESC
+         LIMIT $3 OFFSET $4`,
+        [owner, repoName,limit,offset]
     );
-    
     return result.rows;
 },
 

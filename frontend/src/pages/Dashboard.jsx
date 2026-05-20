@@ -11,12 +11,21 @@ import {
   Plus, 
   Search,
   Filter,
-  Terminal
+  Terminal,
+  Users,
+  ChevronRight,
+  Star,
+  ArrowLeft,
+  GitPullRequest,
+  Shield,
+  Wrench
 } from 'lucide-react';
+
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Input } from '../components/ui/input';
+import ReposScroll from './reposScroll';
 
 const RepoCard = ({ repo }) => (
   <Card className="hover:border-primary/50 transition-colors group cursor-pointer overflow-hidden">
@@ -33,16 +42,31 @@ const RepoCard = ({ repo }) => (
             >
               <span className="text-muted-foreground font-normal">{repo.owner}/</span>{repo.name}
             </Link>
-            <div className={`px-2 py-0.5 text-2xs font-bold uppercase rounded-full border ${
-              repo.isPrivate 
-                ? 'bg-muted text-muted-foreground border-border' 
-                : 'bg-primary/5 text-muted-foreground border-border/50 group-hover:border-primary/30 group-hover:text-primary/80 transition-colors'
-            }`}>
-              {repo.isPrivate ? 'Private' : 'Public'}
-            </div>
+            {repo.isPrivate ? (
+              <Lock className="w-3 h-3 text-muted-foreground/60" />
+            ) : (
+              <Globe className="w-3 h-3 text-muted-foreground/60" />
+            )}
+            {repo.isCollaborated && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground/70">
+                <GitPullRequest className="w-3 h-3" />
+                {repo.role === 'developer' && (
+                  <Wrench className="w-3 h-3" />
+                )}
+                {repo.role === 'maintainer' && (
+                  <Shield className="w-3 h-3" />
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
             <span>Created {new Date(repo.createdAt).toLocaleDateString()}</span>
+            {repo.role === 'developer' && (
+              <span className="text-2xs text-primary/70">developer</span>
+            )}
+            {repo.role === 'maintainer' && (
+              <span className="text-2xs text-primary/70">maintainer</span>
+            )}
           </div>
         </div>
       </div>
@@ -60,11 +84,28 @@ const Dashboard = () => {
   const [repos, setRepos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [seeMoreStates, setSeeMoreStates] = useState({
+    personal: false,
+    contributions: false,
+    public: false
+  });
+  const [loadingMore, setLoadingMore] = useState({
+    personal: false,
+    contributions: false,
+    public: false
+  });
   const currentUsername = localStorage.getItem('username');
-
+  
   useEffect(() => {
     fetchRepos().then(data => {
-      setRepos(Array.isArray(data) ? data : []);
+      const reposData = Array.isArray(data) ? data : [];
+      
+      const processedRepos = reposData.map(repo => ({
+        ...repo,
+        isCollaborated: repo.isCollaborated || false
+      }));
+      
+      setRepos(processedRepos);
       setLoading(false);
     });
   }, []);
@@ -74,8 +115,42 @@ const Dashboard = () => {
     r.owner.toLowerCase().includes(search.toLowerCase())
   );
 
-  const myRepos = filteredRepos.filter(r => r.owner === currentUsername);
-  const publicRepos = filteredRepos.filter(r => !r.isPrivate && r.owner !== currentUsername);
+  const allMyRepos = filteredRepos.filter(r => r.owner === currentUsername);
+  const myRepos = seeMoreStates.personal ? allMyRepos : allMyRepos.slice(0, 4);
+
+  const allContributionsRepos = filteredRepos.filter(r => 
+    r.isCollaborated === true && r.owner !== currentUsername
+  );
+  const contributionsRepos = seeMoreStates.contributions ? allContributionsRepos : allContributionsRepos.slice(0, 4);
+
+  const allPublicRepos = filteredRepos.filter(r => 
+    !r.isPrivate && r.owner !== currentUsername && !r.isCollaborated
+  );
+  const publicRepos = seeMoreStates.public ? allPublicRepos : allPublicRepos.slice(0, 4);
+
+  const toggleSeeMore = async (section) => {
+    if (!seeMoreStates[section]) {
+      // TODO: Fetch all repos for this section when expanding
+      // Example:
+      // setLoadingMore(prev => ({ ...prev, [section]: true }));
+      // const allData = await fetchAllRepos(section);
+      // setRepos(prev => [...prev, ...allData]);
+      // setLoadingMore(prev => ({ ...prev, [section]: false }));
+    }
+  
+    
+    setSeeMoreStates(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+    console.log(section);
+    console.log
+  };
+  const setclearMoreStates =()=>{
+    setSeeMoreStates({ personal: false,
+    contributions: false,
+    public: false})
+  }
 
   if (loading) return (
     <Layout>
@@ -104,8 +179,6 @@ const Dashboard = () => {
           </Button>
         </div>
 
-
-
         {/* Filters & Search */}
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
@@ -123,47 +196,131 @@ const Dashboard = () => {
         </div>
 
         {/* Project Lists */}
-        <div className="space-y-12">
+     {(seeMoreStates.personal||seeMoreStates.contributions||seeMoreStates.public) ? <>
+ 
+     <Button variant="ghost" size="sm" onClick={() => setclearMoreStates('patches')} className="gap-2 hover:text-primary">
+            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+     </Button>
+     <ReposScroll repoType={seeMoreStates}/>
+             </>:   <div className="space-y-12">
+          {/* My Projects Section */}
           <section>
             <div className="flex items-center justify-between mb-4 px-1">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <User className="w-4 h-4 text-primary" /> My Projects
-                <span className="bg-accent text-accent-foreground text-2xs px-2 py-0.5 rounded-full">
-                  {myRepos.length}
+                <span className="bg-muted text-muted-foreground text-2xs px-2 py-0.5 rounded-full">
+                  {allMyRepos.length}
                 </span>
               </h2>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => toggleSeeMore('personal')}
+                className="text-muted-foreground hover:text-primary"
+                disabled={loadingMore.personal}
+              >
+                {loadingMore.personal ? (
+                  <>Loading...</>
+                ) : (
+                  <>
+                    { 'See All'}
+                    <ChevronRight className={`w-4 h-4 ml-1 transition-transform }`} />
+                  </>
+                )}
+              </Button>
             </div>
             {myRepos.length === 0 ? (
-              <div className="text-center py-12 border-2 border-dashed rounded-xl border-accent/20 text-muted-foreground">
-                No personal projects found.
+              <div className="text-center py-12 border-2 border-dashed rounded-xl border-border text-muted-foreground">
+                <User className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                <p>No personal projects found.</p>
+                <Button asChild variant="link" className="mt-2">
+                  <Link to="/new">Create your first project</Link>
+                </Button>
               </div>
             ) : (
               <div className="grid gap-3">
-                {myRepos.map(repo => <RepoCard key={repo.name} repo={repo} />)}
+                {myRepos.map(repo => <RepoCard key={repo.id || repo.name} repo={repo} />)}
               </div>
             )}
           </section>
 
+          {/* Contributions Section */}
+          <section>
+            <div className="flex items-center justify-between mb-4 px-1">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <GitPullRequest className="w-4 h-4 text-primary" /> Contributions
+                <span className="bg-muted text-muted-foreground text-2xs px-2 py-0.5 rounded-full">
+                  {allContributionsRepos.length}
+                </span>
+              </h2>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => toggleSeeMore('contributions')}
+                className="text-muted-foreground hover:text-primary"
+                disabled={loadingMore.contributions}
+              >
+                {loadingMore.contributions ? (
+                  <>Loading...</>
+                ) : (
+                  <>
+                    { 'See All'}
+                    <ChevronRight className={`w-4 h-4 ml-1 transition-transform }`} />
+                  </>
+                )}
+              </Button>
+            </div>
+            {contributionsRepos.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed rounded-xl border-border text-muted-foreground">
+                <GitPullRequest className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                <p>No contributions yet.</p>
+                <p className="text-xs mt-1">Projects you collaborate on will appear here.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {contributionsRepos.map(repo => <RepoCard key={repo.id || repo.name} repo={repo} />)}
+              </div>
+            )}
+          </section>
+
+          {/* Explore Section */}
           <section>
             <div className="flex items-center justify-between mb-4 px-1">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Compass className="w-4 h-4 text-primary" /> Explore
-                <span className="bg-accent text-accent-foreground text-2xs px-2 py-0.5 rounded-full">
-                  {publicRepos.length}
+                <span className="bg-muted text-muted-foreground text-2xs px-2 py-0.5 rounded-full">
+                  {allPublicRepos.length}
                 </span>
               </h2>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => toggleSeeMore('public')}
+                className="text-muted-foreground hover:text-primary"
+                disabled={loadingMore.public}
+              >
+                {loadingMore.public ? (
+                  <>Loading...</>
+                ) : (
+                  <>
+                    { 'See All'}
+                    <ChevronRight className={`w-4 h-4 ml-1 transition-transform }`} />
+                  </>
+                )}
+              </Button>
             </div>
             {publicRepos.length === 0 ? (
-              <div className="text-center py-12 border-2 border-dashed rounded-xl border-accent/20 text-muted-foreground">
-                No public projects to discover.
+              <div className="text-center py-12 border-2 border-dashed rounded-xl border-border text-muted-foreground">
+                <Compass className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                <p>No public projects to discover.</p>
               </div>
             ) : (
               <div className="grid gap-3">
-                {publicRepos.map(repo => <RepoCard key={repo.name} repo={repo} />)}
+                {publicRepos.map(repo => <RepoCard key={repo.id || repo.name} repo={repo} />)}
               </div>
             )}
           </section>
-        </div>
+        </div>}
       </div>
     </Layout>
   );

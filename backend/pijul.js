@@ -37,8 +37,10 @@ const pijul = {
         return runPijul(null, null, `init ${path.join(ownerPath, name)}`);
     },
 
-    async getLog(owner, repoName, channel = 'main') {
-        const output = await runPijul(owner, repoName, `log --channel "${channel}" --description`);
+    async getLog(owner, repoName, channel = 'main',page = 1, limit = 10) {
+        
+        let offset = (page-1)*limit;
+        const output = await runPijul(owner, repoName, `log --channel "${channel}" --description  --limit ${limit} --offset ${offset}`);
         // Parse log output. Pijul log is usually like:
         // Change <HASH>
         // Author: <AUTHOR>
@@ -47,7 +49,7 @@ const pijul = {
         const patches = [];
         const lines = output.split('\n');
         let currentPatch = null;
-
+         
         for (const line of lines) {
             if (line.startsWith('Change ')) {
                 if (currentPatch) patches.push(currentPatch);
@@ -61,7 +63,10 @@ const pijul = {
             }
         }
         if (currentPatch) patches.push(currentPatch);
-        return patches;
+        return {
+            isLastPage:(patches.length==0),
+            patches
+        };
     },
 
     async getTree(owner, repoName, subPath = '', channel = 'main') {

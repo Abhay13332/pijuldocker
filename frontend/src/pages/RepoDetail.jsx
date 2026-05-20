@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState,useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   fetchRepoLog, 
@@ -37,6 +37,7 @@ import {
   Globe, 
   Users, 
   Trash2, 
+  Loader2,
   Shield, 
   AlertTriangle, 
   Settings,
@@ -70,6 +71,7 @@ import {
   DropdownMenuLabel
 } from '../components/ui/dropdown-menu';
 import ConflictsBox from '../components/repo/conflicts';
+import { useCallback } from 'react';
 
 const RepoDetail = () => {
     const { owner, name, tab: urlTab } = useParams();
@@ -83,10 +85,7 @@ const RepoDetail = () => {
         }
     }, [urlTab]);
 
-    const handleTabChange = (newTab) => {
-        setTab(newTab);
-        navigate(`/repos/${owner}/${name}/${newTab}`);
-    };
+    
     const [repoMeta, setRepoMeta] = useState(null);
     const [tree, setTree] = useState([]);
     const [log, setLog] = useState([]);
@@ -110,13 +109,17 @@ const RepoDetail = () => {
     const [commentText, setCommentText] = useState('');
     const [selectedChannel, setSelectedChannel] = useState('main');
     const [copiedHash, setCopiedHash] = useState(false);
-
+    const handleTabChange = (newTab) => {
+        setTab(newTab);
+        
+        navigate(`/repos/${owner}/${name}/${newTab}`);
+    };
     const currentUsername = localStorage.getItem('username');
     const hasConflicts=conflicts!=null && conflicts.length!=0;
     useEffect(() => {
         loadRepoData();
     }, [name]);
-
+console.log(log);
     const loadRepoData = async () => {
         setLoading(true);
         try {
@@ -139,7 +142,7 @@ const RepoDetail = () => {
         console.log(tab);
         const loadContent = async () => {
             setLoading(true);
-            try {
+            try {  
                 if (tab === 'files') {
                     if (path && !path.endsWith('/')) {
                         const content = await fetchFileContent(owner, name, path, selectedChannel);
@@ -152,7 +155,8 @@ const RepoDetail = () => {
                     }
                 } else if (tab === 'patches') {
                     const data = await fetchRepoLog(owner, name, selectedChannel);
-                    setLog(Array.isArray(data) ? data : []);
+                    console.log(data);
+                    setLog(Array.isArray(data.patches) ? data.patches : []);
                 } else if (tab === 'discussions') {
                     const data = await fetchDiscussions(owner, name);
                     setDiscussions(Array.isArray(data) ? data : []);
@@ -319,6 +323,78 @@ const RepoDetail = () => {
         }
         setLoading(false);
     };
+    //patches infinte
+    const observerRefpatches = useRef();
+    const [loadingMorePt, setLoadingMorePt] = useState(false);
+    const [lastPatchArr,setLastPatchArr]=useState(false);
+    const [patchPage,setpatchPage]=useState(1);
+    const lastPatchRef=useCallback(node=>{
+         if (loadingMorePt ||lastPatchArr) return;
+         if (observerRefpatches.current) observerRefpatches.current.disconnect();
+         observerRefpatches.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && (!lastPatchArr)) {
+        loadMorePatches();
+      }
+      
+    });
+       if (node) observerRefpatches.current.observe(node);
+    },[loadingMorePt,lastPatchArr]);
+    const loadMorePatches=async()=>{
+        if(loadingMorePt || lastPatchArr) return;
+        setLoadingMorePt(true);
+        const nextpage=patchPage+1;
+        try{
+            const response=await fetchRepoLog(owner,name,selectedChannel,nextpage,10);
+            const newPatches=Array.isArray(response.patches) ? response.patches : [];
+            setLog(Logs=>[...Logs,...newPatches]);
+            setLastPatchArr(response.isLastPage);
+            setpatchPage(nextpage)
+        }catch(error){
+            console.log({error:error.toString()});
+        }finally{
+            setLoadingMorePt(false);
+        }
+    }
+    //patches infinite end
+
+    //discussions
+    const observerRefdiscussion = useRef();
+    const [loadingMoreDis, setLoadingMoreDis] = useState(false);
+    const [lastDisArr,setLastDisArr]=useState(false);
+    const [DissPage,setDissPage]=useState(1);
+    const lastDisscussRef=useCallback(node=>{
+         if (loadingMoreDis ||lastDisArr) return;
+         if (observerRefdiscussion.current) observerRefdiscussion.current.disconnect();
+         observerRefdiscussion.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && (!lastDisArr)) {
+        loadMoreDiscussion();
+      }
+      
+    });
+       if (node) observerRefdiscussion.current.observe(node);
+    },[loadingMoreDis,lastDisArr]);
+    const loadMoreDiscussion =async()=>{
+        if(loadingMoreDis || lastDisArr)return;
+        setLoadingMoreDis(true);
+        const nextpage=DissPage+1;
+        try{
+            const data=await fetchDiscussions(owner,name,nextpage,10);
+            const newDissarr=(Array.isArray(data) ? data : []);
+            setDiscussions(diss=>[...diss,...newDissarr]);
+            setLastDisArr(newDissarr.length==0);
+            setDissPage(nextpage);
+            
+
+        }
+        catch(error){
+            console.log({error:error.toString()});
+        }finally{
+            setLoadingMoreDis(false);
+        }
+    }
+
+
+    //discussions
     const showCollborators =async () =>{
      const collaborators=await fetchCollaborators(owner,name);
      setCurrCollab(collaborators);
@@ -337,7 +413,7 @@ const RepoDetail = () => {
         <Layout>
             <div className="text-center py-20">
                 <h2 className="text-2xl font-bold">Repository not found</h2>
-                <Button asChild className="mt-4" variant="outline">
+                <Button asChild className="mt-4" variant="outline hover:text-primary">
                     <Link to="/">Back to Dashboard</Link>
                 </Button>
             </div>
@@ -536,7 +612,7 @@ const RepoDetail = () => {
                             <div className="space-y-6">
                                 {tab === 'patch-detail' ? (
                                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                        <Button variant="ghost" size="sm" onClick={() => setTab('patches')} className="gap-2">
+                                        <Button variant="ghost" size="sm" onClick={() => setTab('patches')} className="gap-2 hover:text-primary" >
                                             <ArrowLeft className="w-4 h-4" /> Back to patches
                                         </Button>
                                         <Card className="border-border/50 shadow-lg overflow-hidden">
@@ -738,9 +814,10 @@ const RepoDetail = () => {
                                             </div>
                                         ) : (
                                             <div className="grid gap-3">
-                                                {log.map(patch => (
+                                                {log.map((patch,idx) => (
                                                     <Card 
                                                         key={patch.hash} 
+                                                        ref={(idx==log.length-1)?lastPatchRef:null}
                                                         className="hover:bg-accent/30 cursor-pointer border-border/50 transition-all hover:translate-x-1"
                                                         onClick={() => showPatch(patch.hash)}
                                                     >
@@ -764,18 +841,28 @@ const RepoDetail = () => {
                                                         </CardHeader>
                                                     </Card>
                                                 ))}
+                                                {loadingMorePt && (
+                                                   <div className="flex justify-center py-4">
+                                                     <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                                   </div>
+                                                 )}
+                                                {lastPatchArr && <div className="text-center py-4 text-muted-foreground text-sm">
+                                                       You've reached the end of patches
+                                                     </div>}
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </div>
                         )}
+
+
                         {/* Discussions Tab */}
                         {tab === 'discussions' && (
                             <div className="space-y-6">
                                 {selectedPR ? (
                                     <div className="space-y-6 animate-in fade-in duration-300">
-                                        <Button variant="ghost" size="sm" onClick={() => setSelectedPR(null)} className="gap-2">
+                                        <Button variant="ghost" size="sm" onClick={() => setSelectedPR(null)} className="gap-2 hover:text-primary">
                                             <ArrowLeft className="w-4 h-4" /> Back to discussions
                                         </Button>
                                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -931,9 +1018,10 @@ const RepoDetail = () => {
                                             </div>
                                         ) : (
                                             <div className="grid gap-3">
-                                                {discussions.map(disc => (
+                                                {discussions.map((disc,idx) => (
                                                     <Card 
                                                         key={disc.id} 
+                                                        ref={(discussions.length-1==idx)?lastDisscussRef:null}
                                                         className="hover:border-primary/50 transition-all hover:translate-x-1 cursor-pointer" 
                                                         onClick={() =>{ showSelectedpr(disc.id),showConflictsPR(disc.id)}}
                                                     >
@@ -957,6 +1045,16 @@ const RepoDetail = () => {
                                                         </CardHeader>
                                                     </Card>
                                                 ))}
+                                                 {loadingMoreDis && (
+                                                        <div className="flex justify-center py-4">
+                                                          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                                        </div>
+                                                      )}
+                                                {lastDisArr && (
+                                                        <div className="text-center py-4 text-muted-foreground text-sm">
+                                                          You've reached the end of Discussions
+                                                        </div>
+                                                      )}
                                             </div>
                                         )}
                                     </div>

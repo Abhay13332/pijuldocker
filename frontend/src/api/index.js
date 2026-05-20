@@ -70,6 +70,18 @@ export const fetchRepos = async () => {
     const res = await fetch(`${API_BASE}/repos`, { headers: getHeaders() });
     return res.json();
 };
+export const fetchPersonalRepos = async (page = 1, limit = 4) => {
+        const res = await fetch(`${API_BASE}/repos/personal?page=${page}&limit=${limit}`, { headers: getHeaders() });
+        return res.json();
+}
+export const fetchCollabRepos = async (page = 1, limit = 4) =>{
+        const res = await fetch(`${API_BASE}/repos/collaborators?page=${page}&limit=${limit}`, { headers: getHeaders() });
+        return res.json();
+}
+export const fetchPublicRepos = async (page = 1, limit = 4) =>{
+        const res = await fetch(`${API_BASE}/repos/public?page=${page}&limit=${limit}`, { headers: getHeaders() });
+        return res.json();
+}
 export const fetchRepoMeta= async (owner,name) =>{
     const res = await fetch(`${API_BASE}/repo/${repoPath(owner,name)}/meta`, { headers: getHeaders() });
     if(!res.ok) return null;
@@ -85,8 +97,8 @@ export const createRepo = async (name, isPrivate = false) => {
     return res.json();
 };
 
-export const fetchRepoLog = async (owner, name, channel = 'main') => {
-    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/log?channel=${encodeURIComponent(channel)}`, { headers: getHeaders() });
+export const fetchRepoLog = async (owner, name, channel = 'main',page=1,limit=10) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/log?channel=${encodeURIComponent(channel)}&page=${page}&limit=${limit}`, { headers: getHeaders() });
     return res.json();
 };
 
@@ -157,8 +169,8 @@ export const forkRepo = async (owner, name, newName) => {
     return res.json();
 };
 
-export const fetchDiscussions = async (owner, repoName) => {
-    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions`, { headers: getHeaders() });
+export const fetchDiscussions = async (owner, repoName,page=1,limit=10) => {
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions?page=${page}&limit=${limit}`, { headers: getHeaders() });
     return res.json();
 };
 
