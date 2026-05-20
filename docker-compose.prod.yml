@@ -2,16 +2,57 @@ version: '3.9'
 
 services:
   pijulserv:
-    image: docker.io/abhay1302/pijulserv:latest
+    image: abhay1302/pijulserv:latest
+    build: .
     container_name: pijulserv-app
     ports:
-      - "3001:3001"   # Web UI API & Frontend
+      - "3001:3001"   # Backend API + Frontend (served by Express)
       - "2222:2222"   # Custom Node SSH Server
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=pijulserv
+      - POSTGRES_PASSWORD=mysecretpassword
+      - POSTGRES_DB=pijulDB
+      - USE_POSTGRES=true
     volumes:
       - pijul_repos:/app/repos
-      - pijul_data:/app/data
     restart: unless-stopped
+  
+  postgres:
+    image: docker.io/postgres:16-alpine # Alpine images are lighter on RAM
+    container_name: pijul_postgres
+    environment:
+      POSTGRES_USER: pijulserv  
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: pijulDB
+    # Pass configuration flags directly to the postgres entrypoint command
+    command: >
+      postgres
+      -c max_connections=20
+      -c shared_buffers=64MB
+      -c work_mem=2MB
+      -c maintenance_work_mem=32MB
+      -c effective_cache_size=256MB
+    
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Hardware resource limits to protect the host OS
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pijulserv -d pijulDB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 256M
+    restart: always
 volumes:
   pijul_repos:
-  pijul_data:
+  pgdata:
+networks:
+  pijul-network:
+    driver: bridge

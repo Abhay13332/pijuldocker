@@ -367,8 +367,8 @@ if (useShadow) {
                         console.log(`SSH: Updated channels can't accessible by ${username}, skipping pull`);
                         cleanupShadow();
                         console.log("nothing is updated")
-                        client.stderr.write("\x1b[2J\x1b[H")
-                        channel.stderr.write("(permission denied) nothing is changed\n")
+                        channel.stderr.write("\x1b[1F\x1b[0J");
+                        channel.stderr.write(`\x1b[31mpijul: permission denied\npijul: do not have access to edit in ${updatedChannels[0]} \npijul: nothing is changed\x1b[0m\n`);
                         try { channel.exit(code ?? 0); channel.end(); } catch (e) {}
                         return;
                     }
