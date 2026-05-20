@@ -13,7 +13,7 @@ const discussionStore = require('./discussionStore');
 const app = express();
 const PORT = 3001;
 
-const JWT_SECRET = 'pijul-serv-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET||"my-secret-password";
 
 app.use(cors({
     origin: '*',

@@ -1,4 +1,4 @@
-const API_BASE = `http://${window.location.hostname}:5176/api`;
+const API_BASE = `http://${window.location.hostname}:${window.location.port}/api`;
 
 const getHeaders = () => {
     const token = localStorage.getItem('token');
