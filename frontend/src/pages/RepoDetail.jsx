@@ -5,7 +5,8 @@ import {
   fetchRepoTree, 
   fetchFileContent, 
   fetchPatchDetail, 
-  fetchRepos, 
+  fetchRepoMeta, 
+  fetchCollaborators,
   addCollaborator, 
   removeCollaborator, 
   deleteRepo,
@@ -20,6 +21,7 @@ import {
   closeDiscussion,
   deleteDiscussion,
   toggleProtection,
+  fetchProtectedCh,
   getMergeConflicts
 } from '../api';
 import { 
@@ -71,6 +73,7 @@ import ConflictsBox from '../components/repo/conflicts';
 
 const RepoDetail = () => {
     const { owner, name, tab: urlTab } = useParams();
+    console.log(owner,name);
     const navigate = useNavigate();
     const [tab, setTab] = useState(urlTab || 'files');
 
@@ -97,9 +100,10 @@ const RepoDetail = () => {
     const [forkLoading, setForkLoading] = useState(false);
     const [newCollab, setNewCollab] = useState('');
     const [newCollabRole, setNewCollabRole] = useState('developer');
+    const [currCollab,setCurrCollab] = useState([]);
+    const [currProtectedCh,setCurrProtectedCh]=useState([])
     const [discussions, setDiscussions] = useState([]);
     const [conflicts,setConflicts]=useState(null);
-    
     const [selectedPR, setSelectedPR] = useState(null);
     const [isCreatingPR, setIsCreatingPR] = useState(false);
     const [newPR, setNewPR] = useState({ title: '', description: '', sourceChannel: '', targetChannel: 'main' });
@@ -116,15 +120,12 @@ const RepoDetail = () => {
     const loadRepoData = async () => {
         setLoading(true);
         try {
-            const [reposData, channelsData] = await Promise.all([
-                fetchRepos(),
+            const [repoData, channelsData] = await Promise.all([
+                fetchRepoMeta(owner,name),
                 fetchChannels(owner, name)
             ]);
-            // Find by owner+name — exact match, no ambiguity
-            const meta = Array.isArray(reposData)
-                ? reposData.find(r => r.name === name && r.owner === owner)
-                : null;
-            setRepoMeta(meta);
+            console.log(repoData);
+            setRepoMeta(repoData);
             
             setChannels(Array.isArray(channelsData) ? channelsData : []);
         } catch (err) {
@@ -134,8 +135,8 @@ const RepoDetail = () => {
     };
 
     useEffect(() => {
-        if (tab === 'patch-detail' || tab === 'settings') return;
-        
+        if (tab === 'patch-detail' ) return;
+        console.log(tab);
         const loadContent = async () => {
             setLoading(true);
             try {
@@ -155,6 +156,8 @@ const RepoDetail = () => {
                 } else if (tab === 'discussions') {
                     const data = await fetchDiscussions(owner, name);
                     setDiscussions(Array.isArray(data) ? data : []);
+                }else if(tab==='settings'){
+                    await Promise.all([showCollborators(), showProtectedChannels()]);
                 }
             } catch (err) {
                 console.error('Error loading content:', err);
@@ -165,27 +168,41 @@ const RepoDetail = () => {
         loadContent();
     }, [name, tab, path, selectedChannel]);
 
-    const handleSwitchChannel = async (channelName) => {
-        setLoading(true);
-        try {
-            await switchChannel(owner, name, channelName);
-            await loadRepoData();
-            setPath('');
-        } catch (err) {
-            alert('Failed to switch channel: ' + err.toString());
-        }
-        setLoading(false);
-    };
+    // const handleSwitchChannel = async (channelName) => {
+    //     setLoading(true);
+    //     try {
+    //         await switchChannel(owner, name, channelName);
+    //         await loadRepoData();
+    //         setPath('');
+    //     } catch (err) {
+    //         alert('Failed to switch channel: ' + err.toString());
+    //     }
+    //     setLoading(false);
+    // };
 
     const handleToggleProtection = async (channel) => {
         try {
-            const updatedRepo = await toggleProtection(owner, name, channel);
-            setRepoMeta(updatedRepo);
+            await toggleProtection(owner, name, channel);
+            if(currProtectedCh.includes(channel)){
+                setCurrProtectedCh(channels=>channels.filter(c));
+
+            }else{
+                setCurrProtectedCh(channels=>[...channels,{name:channel,isCurrent:false}]);
+            }
         } catch (err) {
             alert('Failed to toggle protection');
         }
     };
-
+    const showSelectedpr = async(id) =>{
+        setLoading(true);
+        try{
+            const pr=await fetchDiscussion(owner,repoMeta.name,id);
+            setSelectedPR(pr);
+        }catch(e){
+            alert("failed to show selected pr")
+        }
+         setLoading(false);
+    }
     const handleCreatePR = async () => {
         try {
             const pr = await createDiscussion(owner, name, {
@@ -200,6 +217,9 @@ const RepoDetail = () => {
             setDiscussions([pr, ...discussions]);
             setIsCreatingPR(false);
             setNewPR({ title: '', description: '', sourceChannel: '', targetChannel: 'main' });
+            let channelsData=await fetchChannels(owner, name);
+            setChannels(Array.isArray(channelsData) ? channelsData : []);
+
         } catch (err) {
             alert('Failed to create discussion');
         }
@@ -287,7 +307,7 @@ const RepoDetail = () => {
         }
         setForkLoading(false);
     };
-
+    
     const showPatch = async (hash) => {
         setLoading(true);
         try {
@@ -299,9 +319,17 @@ const RepoDetail = () => {
         }
         setLoading(false);
     };
+    const showCollborators =async () =>{
+     const collaborators=await fetchCollaborators(owner,name);
+     setCurrCollab(collaborators);
+    }
+    const showProtectedChannels = async()=>{
+        const protectedch=await fetchProtectedCh(owner,name);
+        setCurrProtectedCh(protectedch);
+    }
     
     const userRole = repoMeta?.owner === currentUsername ? 'owner' :
-                     repoMeta?.collaborators?.find(c => c.username === currentUsername)?.role || 'viewer';
+                     currCollab?.find(c => c.username === currentUsername)?.role || 'viewer';
     const canManage = ['owner', 'maintainer'].includes(userRole);
     const currentChannel = channels.find(c => c.isCurrent)?.name || 'main';
 
@@ -787,13 +815,13 @@ const RepoDetail = () => {
                                             <span>into</span>
                                             <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">{selectedPR.targetChannel}</span>
                                         </div>
-
+                                  {selectedPR.description && selectedPR.description.length>0 &&
                                         <Card className="border-border/50">
                                             <CardContent className="pt-6">
                                                 <p className="whitespace-pre-wrap text-sm leading-relaxed">{selectedPR.description}</p>
                                             </CardContent>
                                         </Card>
-
+}
                                         {selectedPR.status === 'open' && (
                                             <div className="bg-primary/5 border border-primary/20 rounded-none p-4 space-y-3">
                                                 <h4 className="text-sm font-bold flex items-center gap-2">
@@ -805,9 +833,9 @@ const RepoDetail = () => {
                                                 </p>
                                                 <div className="bg-background border rounded-none p-2 flex items-center justify-between">
                                                     <code className="text-[10px] font-mono text-primary">
-                                                        pijul push {currentUsername}@{window.location.hostname}:/{repoMeta?.owner}/{name} --to-channel pr-{selectedPR.id}
+                                                        pijul push {currentUsername}@{window.location.hostname}:/{repoMeta?.owner}/{name} --to-channel {selectedPR.sourceChannel}
                                                     </code>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul push ${window.location.hostname}:/${repoMeta?.owner}/${name} --to-channel pr-${selectedPR.id}`)}>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul push ${window.location.hostname}:/${repoMeta?.owner}/${name} --to-channel ${selectedPR.sourceChannel}`)}>
                                                         <Copy className="w-3 h-3" />
                                                     </Button>
                                                 </div>
@@ -834,7 +862,7 @@ const RepoDetail = () => {
                                             </div>
                                             <div className="space-y-3 pt-4">
                                                 <textarea 
-                                                    className="w-full bg-background border rounded-none p-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary min-h-[100px]"
+                                                    className="w-full bg-background border rounded-none p-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary min-h-25"
                                                     placeholder="Leave a comment..."
                                                     value={commentText}
                                                     onChange={(e) => setCommentText(e.target.value)}
@@ -862,7 +890,7 @@ const RepoDetail = () => {
                                             <div className="space-y-2">
                                                 <label className="text-sm font-medium">Description</label>
                                                 <textarea 
-                                                    className="w-full bg-background border rounded-none p-3 text-sm min-h-[150px] focus:outline-none focus:ring-1 focus:ring-primary"
+                                                    className="w-full bg-background border rounded-none p-3 text-sm min-h-37.5 focus:outline-none focus:ring-1 focus:ring-primary"
                                                     placeholder="What changes are you proposing? Explain why."
                                                     value={newPR.description}
                                                     onChange={(e) => setNewPR({ ...newPR, description: e.target.value })}
@@ -907,7 +935,7 @@ const RepoDetail = () => {
                                                     <Card 
                                                         key={disc.id} 
                                                         className="hover:border-primary/50 transition-all hover:translate-x-1 cursor-pointer" 
-                                                        onClick={() =>{ setSelectedPR(disc),showConflictsPR(disc.id)}}
+                                                        onClick={() =>{ showSelectedpr(disc.id),showConflictsPR(disc.id)}}
                                                     >
                                                         <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
                                                             <div className="flex items-center gap-3">
@@ -968,12 +996,14 @@ const RepoDetail = () => {
                                                     </select>
                                                     <Button 
                                                         onClick={() => {
-                                                            addCollaborator(owner, name, newCollab, newCollabRole).then((res) => {
+                                                            addCollaborator(owner, name, newCollab.trim(), newCollabRole).then((res) => {
                                                                 if (res.error) {
                                                                     alert('Failed to add user: ' + res.error);
                                                                 } else {
+                                                                    setCurrCollab(currCollab=>[...currCollab.filter(colab=>colab.username!=newCollab.trim()),{username:newCollab.trim(),role:newCollabRole}]);
                                                                     setNewCollab('');
-                                                                    loadRepoData();
+
+
                                                                 }
                                                             }).catch(err => {
                                                                 alert('Error: ' + err.message);
@@ -985,7 +1015,7 @@ const RepoDetail = () => {
                                                     </Button>
                                                 </div>
                                                 <div className="border border-border/50 rounded-none divide-y divide-border/50">
-                                                    {repoMeta?.collaborators?.map(c => (
+                                                    {currCollab?.map(c => (
                                                         <div key={c.username} className="flex items-center justify-between p-3">
                                                             <div className="flex items-center gap-3">
                                                                 <div className="w-8 h-8 rounded-none bg-accent flex items-center justify-center">
@@ -1003,7 +1033,9 @@ const RepoDetail = () => {
                                                                 onClick={() => {
                                                                     removeCollaborator(owner, name, c.username).then((res) => {
                                                                         if (res.error) alert('Failed: ' + res.error);
-                                                                        else loadRepoData();
+                                                                        else {
+                                                                            setCurrCollab(currCollab=>currCollab.filter((co)=>co.username!=c.username))
+                                                                        };
                                                                     }).catch(err => alert('Error: ' + err.message));
                                                                 }}
                                                             >
@@ -1011,7 +1043,7 @@ const RepoDetail = () => {
                                                             </Button>
                                                         </div>
                                                     ))}
-                                                    {(!repoMeta?.collaborators || repoMeta.collaborators.length === 0) && (
+                                                    {(!currCollab || currCollab.length === 0) && (
                                                         <div className="p-4 text-center text-sm text-muted-foreground">
                                                             No collaborators added yet.
                                                         </div>
@@ -1039,7 +1071,7 @@ const RepoDetail = () => {
                                                 {channels.sort((a,b)=>a.name.localeCompare(b.name)).map(c => (
                                                     <div key={c.name} className="flex items-center justify-between p-4 transition-colors hover:bg-accent/5">
                                                         <div className="flex items-center gap-3">
-                                                            {repoMeta?.protectedChannels?.includes(c.name) ? 
+                                                            {currProtectedCh?.includes(c.name) ? 
                                                                 <Lock className="w-4 h-4 text-primary" /> : 
                                                                 <Unlock className="w-4 h-4 text-muted-foreground" />
                                                             }
@@ -1049,12 +1081,12 @@ const RepoDetail = () => {
                                                             </div>
                                                         </div>
                                                         <Button 
-                                                            variant={repoMeta?.protectedChannels?.includes(c.name) ? "destructive" : "outline"}
+                                                            variant={currProtectedCh?.includes(c.name) ? "destructive" : "outline"}
                                                             size="sm"
                                                             onClick={() => handleToggleProtection(c.name)}
                                                             className="h-8"
                                                         >
-                                                            {repoMeta?.protectedChannels?.includes(c.name) ? "Unprotect" : "Protect"}
+                                                            {currProtectedCh?.includes(c.name) ? "Unprotect" : "Protect"}
                                                         </Button>
                                                     </div>
                                                 ))}

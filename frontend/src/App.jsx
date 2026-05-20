@@ -8,7 +8,7 @@ import Settings from './pages/Settings';
 import Guide from './pages/Guide';
 
 const ProtectedRoute = ({ children }) => {
-    const isAuthenticated = !!localStorage.getItem('token');
+    const isAuthenticated = !!localStorage.getItem('isLoggedIn')
     return isAuthenticated ? children : <Navigate to="/login" />;
 };
 

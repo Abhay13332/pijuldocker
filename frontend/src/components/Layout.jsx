@@ -50,7 +50,7 @@ const Layout = ({ children, repoName, owner }) => {
   const repoBase = owner && repoName ? `${owner}/${repoName}` : repoName;
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('isLoggedIn');
     localStorage.removeItem('username');
     navigate('/login');
   };

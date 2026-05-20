@@ -4,15 +4,19 @@ const { Server } = require('ssh2');
 const users = require('./users');
 const repoStore = require('./repoStore');
 const discussionStore = require('./discussionStore');
+const {pool} = require('./db');
 const { spawn } = require('child_process');
-
+const { mkdirSync } = require('node:fs');
 const REPOS_PATH = process.env.REPOS_PATH || path.join(__dirname, '../repos');
-const HOST_KEY_PATH = path.join(__dirname, '../data/host_key');
+const HOST_DATA_DIR_PATH =  path.join(__dirname, '../data');
+const HOST_KEY_PATH = path.join(HOST_DATA_DIR_PATH, 'host_key');
 
 // Ensure we have a host key
+
 if (!fs.existsSync(HOST_KEY_PATH)) {
     console.log('Generating SSH host key...');
     const { execSync } = require('child_process');
+      mkdirSync(HOST_DATA_DIR_PATH, { recursive: true });
     execSync(`ssh-keygen -t ed25519 -f "${HOST_KEY_PATH}" -N ""`);
 }
 
@@ -21,11 +25,13 @@ const server = new Server({
 }, (client) => {
     let authUser = null;
 
-    client.on('authentication', (ctx) => {
+    client.on('authentication', async(ctx) => {
         const username = ctx.username;
         console.log(`SSH: Auth attempt for user: ${username} using ${ctx.method}`);
-        const user = users.findByUsername(username);
-
+        try{
+        const user =await users.findByUsername(username);
+        user.sshKeys=await users.getsshkeys(username);
+        
         if (!user) {
             console.log(`SSH: User ${username} not found in database.`);
             return ctx.reject();
@@ -52,20 +58,34 @@ const server = new Server({
             console.log(`SSH: No key match found for ${username}`);
         }
         ctx.reject();
+        }catch(e){
+               console.error(`SSH: error during authentication:`, e);
+            ctx.reject();
+        }
     }).on('ready', () => {
         client.on('session', (accept, reject) => {
             const session = accept();
-            session.on('exec', (accept, reject, info) => {
+            session.on('exec',async (accept, reject, info) => {
                 const exec = accept();
                 const cmd = info.command;
                 console.log(`SSH: info: ${JSON.stringify(info)}`);
-                handleCommand(authUser, cmd, exec);
+                try{
+
+                  await  handleCommand(authUser, cmd, exec);
+                }catch(e){
+                    exec.stderr.write(e);
+                    channel.exit(1);
+                     if (typeof exec.exit === 'function') {
+                        exec.exit(1);
+                    }
+                    exec.end();
+                }
             });
         });
     });
 });
 
-function handleCommand(username, fullCmd, channel) {
+async function handleCommand(username, fullCmd, channel) {
     const parts = fullCmd.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
     console.log(`SSH: User ${username} executing: ${fullCmd}`);
     console.log(`SSH: Command Parts: ${JSON.stringify(parts)}`);
@@ -131,10 +151,13 @@ function handleCommand(username, fullCmd, channel) {
         return channel.exit(1);
     }
      let requiredLevel='read';
-    const canAccess = repoStore.canAccess(repoOwner, repoName, username, 'read');
+     console.log(repoOwner," ",repoName," ",username);
+    const canAccess =await repoStore.canAccess(repoOwner, repoName, username, 'read');
     console.log(`SSH: Access control check: user=${username}, repo=${repoOwner}/${repoName}, level=${requiredLevel}, result=${canAccess}`);
+    
     if (!canAccess) {
         console.warn(`SSH: ACCESS DENIED for ${username} on ${repoOwner}/${repoName} (${requiredLevel})`);
+        
         channel.stderr.write(`Access Denied: ${requiredLevel} permission required for '/${repoOwner}/${repoName}'.\n`);
         return channel.exit(1);
     }
@@ -152,13 +175,11 @@ function handleCommand(username, fullCmd, channel) {
         }
         return arg;
     });
-  
-    const hasAllWriteAccess = repoStore.canAccess(repoOwner, repoName, username, 'allwrite');
-    const hasUnprotectedWriteAccess = repoStore.canAccess(repoOwner, repoName, username, 'unprotectedwrite');
-    const isDeveloper = hasUnprotectedWriteAccess && !hasAllWriteAccess; // Developers have unprotectedwrite but NOT allwrite
-    const isViewer = !hasUnprotectedWriteAccess && !hasAllWriteAccess;
-    console.log(isDeveloper?"SSH: user is a developer":"SSH :user is visitor")
-    let useShadow = !hasAllWriteAccess && subCommand === 'protocol';
+    const role=await repoStore.getUserRole(repoOwner,repoName,username);
+    console.log(`SSH:   user ${username} roll is ${(role)}`)
+    const isDeveloper = role=='developer'; // Developers have unprotectedwrite but NOT allwrite
+    const isViewer = role=='viewer';
+    let useShadow = (isDeveloper || isViewer) && subCommand === 'protocol';
     console.log(`SSH: Execution context: subCommand=${subCommand}, isViewer=${isViewer} ,isdeveloper=${isDeveloper}, useShadow=${useShadow}, targetChannel=${targetChannel}`);
 if (useShadow) {
     const shadowId = Math.random().toString(36).substring(7);
@@ -257,7 +278,7 @@ if (useShadow) {
             }
         };
 
-        child.on('exit', (code) => {
+        child.on('exit',async (code) => {
             console.log(`SSH: Shadow session for ${username} ended. Status: ${code}`);
 
             if (code === 0) {
@@ -290,53 +311,63 @@ if (useShadow) {
                     console.log(`SSH: Updated channel(s): ${JSON.stringify(updatedChannels)}`);
                     
                     // Get user's open discussions from discussions.json
-                    const getUserchannels=(updatedChannels)=>{
-                      let userChannelNames = [];
-                      try {
-                        if(!isDeveloper){
-                          const discData = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/discussions.json'), 'utf8'));
-                          const userDiscussions = discData.filter(d => 
-                            d.owner === repoOwner && 
-                            d.repoName === repoName && 
-                            d.author === username && 
-                            d.status === 'open'
-                        );
-                          userChannelNames = userDiscussions.map(d => d.sourceChannel);
-                        }
-                          console.log(`SSH: User's open discussion channels: ${JSON.stringify(userChannelNames)}`);
-                          return updatedChannels.filter(channel => 
-                               userChannelNames.includes(channel)
-                             )
-                        } catch (err) {
-                          console.error(`SSH: Failed to read discussions.json: ${err.message}`);
-                          return [];
-                       }
-                    }
+                   const getUserChannels = async (updatedChannels) => {
+                                try {
+                                    const result = await pool.query(
+                                        `SELECT source_channel 
+                                         FROM discussions 
+                                         WHERE owner = $1 
+                                           AND repo_name = $2 
+                                           AND author = $3 
+                                           AND status = 'open'`,
+                                        [repoOwner, repoName, username]
+                                    );
+                                    
+                                    const userChannelNames = result.rows.map(row => row.source_channel);
+                                    console.log(`SSH: User's open discussion channels: ${JSON.stringify(userChannelNames)}`);
+                                    
+                                    return updatedChannels.filter(channel => 
+                                        userChannelNames.includes(channel)
+                                    );
+                                } catch (err) {
+                                    console.error(`SSH: Failed to get user channels from database: ${err.message}`);
+                                    return [];
+                                }
+                            };
                     
-                    const getunprotectedchannel=(updatedChannels)=>{
-                        try{
-                        const repoData=JSON.parse(fs.readFileSync(path.join(__dirname, '../data/repos.json'), 'utf8'));
-                        const prchannels=repoData.find((repo)=>repo.name==repoName &&repo.owner==repoOwner).protectedChannels;
-                        // console.log(repoData.find((repo)=>(repo.name==repoName) && repo.owner==repoOwner));
-                        console.log(`SSH: get repo protected channels : ${JSON.stringify(prchannels)}`);
+                   const getUnprotectedChannels = async (updatedChannels) => {
+                                try {
+                                    const result = await pool.query(
+                                        `SELECT protected_channels 
+                                         FROM repositories 
+                                         WHERE owner = $1 AND name = $2`,
+                                        [repoOwner, repoName]
+                                    );
+                                    
+                                    if (result.rows.length === 0) return [];
+                                    
+                                    const protectedChannels = result.rows[0].protected_channels;
+                                    return updatedChannels.filter(ch => !protectedChannels.includes(ch));
+                                } catch (err) {
+                                    console.error(`SSH: Failed to get unprotected channels: ${err.message}`);
+                                    return [];
+                                }
+                            };
 
-                        const unprchannle= updatedChannels.filter((ch)=>!prchannels.includes(ch));
-                        console.log(`SSH: get repo unprotected channels : ${JSON.stringify(unprchannle)}`);
-                        return unprchannle;
-                        }catch(e){
-                        console.error(`SSH: Failed to read repos.json: ${err.message}`);
-                        return [];
-                        }
-
-                    }
                     // Find which updated channels belong to this user
-                    const channelsToPull =isDeveloper?getunprotectedchannel(updatedChannels):getUserchannels(updatedChannels);
+                    let channelsToPull=null;
+                    if(isDeveloper){
+                       channelsToPull = await getUnprotectedChannels(updatedChannels);
+                    }else{
+                        channelsToPull = await  getUserChannels(updatedChannels)
+                    }
                     
                     
                     if (channelsToPull.length === 0) {
                         console.log(`SSH: Updated channels can't accessible by ${username}, skipping pull`);
                         cleanupShadow();
                         console.log("nothing is updated")
+                        client.stderr.write("\x1b[2J\x1b[H")
                         channel.stderr.write("(permission denied) nothing is changed\n")
                         try { channel.exit(code ?? 0); channel.end(); } catch (e) {}
                         return;

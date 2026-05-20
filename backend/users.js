@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-
+const {pool}=require('./db')
+const bcrypt = require('bcrypt');
 const USERS_FILE = path.join(__dirname, '../data/users.json');
 
 if (!fs.existsSync(path.dirname(USERS_FILE))) {
@@ -13,53 +14,126 @@ if (!fs.existsSync(USERS_FILE)) {
 }
 
 const users = {
-    getAll() {
-        return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+   
+
+    async findByUsername(username) {
+        const result = await pool.query(
+        'SELECT * FROM users WHERE username = $1',
+        [username]
+    );
+    return result.rows[0] || null;
     },
 
-    saveAll(data) {
-        fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
+   async create(username, password) {
+       const existingUser = await pool.query(
+        'SELECT username FROM users WHERE username = $1',
+        [username]
+      );
+       if (existingUser.rows.length > 0) {
+        throw new Error('User already exists');
+       }
+
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    
+    const userId = crypto.randomUUID();
+    
+    // Insert user into database
+    await pool.query(
+        'INSERT INTO users (id, username, password, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)',
+        [userId, username, hashedPassword]
+    );
+    
+    return {
+        id: userId,
+        username: username,
+        password: hashedPassword,
+        sshKeys: []
+    };
+
     },
 
-    findByUsername(username) {
-        return this.getAll().find(u => u.username === username);
-    },
-
-    create(username, password) {
-        const data = this.getAll();
-        if (data.find(u => u.username === username)) throw new Error('User already exists');
-        
-        // In a real app, hash the password!
-        const newUser = { 
-            id: crypto.randomUUID(), 
-            username, 
-            password, 
-            sshKeys: [] 
-        };
-        data.push(newUser);
-        this.saveAll(data);
-        return newUser;
-    },
-
-    addSshKey(username, keyName, publicKey) {
-        const data = this.getAll();
-        const user = data.find(u => u.username === username);
-        if (!user) throw new Error('User not found');
-        
-        user.sshKeys.push({ id: crypto.randomUUID(), name: keyName, key: publicKey });
-        this.saveAll(data);
-        return user;
-    },
-
-    removeSshKey(username, keyId) {
-        const data = this.getAll();
-        const user = data.find(u => u.username === username);
-        if (!user) throw new Error('User not found');
-        
-        user.sshKeys = user.sshKeys.filter(k => k.id !== keyId);
-        this.saveAll(data);
-        return user;
+    async addSshKey(username, keyName, publicKey) {
+    // First, get the user
+    const userResult = await pool.query(
+        'SELECT id FROM users WHERE username = $1',
+        [username]
+    );
+    
+    if (userResult.rows.length === 0) {
+        throw new Error('User not found');
     }
+    
+    const userId = userResult.rows[0].id;
+    const keyId = crypto.randomUUID();
+    
+    // Insert the SSH key
+    await pool.query(
+        `INSERT INTO ssh_keys (id, user_id, name, key, created_at) 
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+        [keyId, userId, keyName, publicKey]
+    );
+    
+   
+},
+
+   async removeSshKey(username, keyId) {
+    // First, get the user
+    const userResult = await pool.query(
+        'SELECT id FROM users WHERE username = $1',
+        [username]
+    );
+    
+    if (userResult.rows.length === 0) {
+        throw new Error('User not found');
+    }
+    
+    const userId = userResult.rows[0].id;
+    
+    // Check if the SSH key exists and belongs to this user
+    const keyResult = await pool.query(
+        'SELECT id FROM ssh_keys WHERE id = $1 AND user_id = $2',
+        [keyId, userId]
+    );
+    
+    if (keyResult.rows.length === 0) {
+        throw new Error('SSH key not found or does not belong to this user');
+    }
+    
+    // Delete the SSH key
+    await pool.query(
+        'DELETE FROM ssh_keys WHERE id = $1 AND user_id = $2',
+        [keyId, userId]
+    );
+    
+    
+    },
+   async getsshkeys(username) {
+    // First, get the user
+    const userResult = await pool.query(
+        'SELECT id FROM users WHERE username = $1',
+        [username]
+    );
+    
+    if (userResult.rows.length === 0) {
+        throw new Error('User not found');
+    }
+    
+    const userId = userResult.rows[0].id;
+    
+    // Get all SSH keys for this user
+    const keysResult = await pool.query(
+        'SELECT id, name, key, created_at FROM ssh_keys WHERE user_id = $1 ORDER BY created_at DESC',
+        [userId]
+    );
+    
+    return keysResult.rows.map(key => ({
+        id: key.id,
+        name: key.name,
+        key: key.key,
+        createdAt: key.created_at
+    }));
+}
 };
 
 module.exports = users;

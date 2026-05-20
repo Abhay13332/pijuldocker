@@ -21,7 +21,7 @@ const Login = () => {
                 ? await register(username, password)
                 : await login(username, password);
             
-            if (data.token) {
+            if (data.username) {
                 navigate('/');
             } else {
                 setError(data.error || 'Authentication failed');

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-
+const pool = require('./db');
 const REPO_META_FILE = path.join(__dirname, '../data/repos.json');
 
 if (!fs.existsSync(path.dirname(REPO_META_FILE))) {
@@ -12,69 +12,294 @@ if (!fs.existsSync(REPO_META_FILE)) {
 }
 
 const repoStore = {
-    getAll() {
-        return JSON.parse(fs.readFileSync(REPO_META_FILE, 'utf8'));
-    },
+    async getByOwnerAndName(owner, name) {
+    const result = await pool.query(
+        `SELECT id, name, owner, is_private, created_at 
+         FROM repositories 
+         WHERE owner = $1 AND name = $2`,
+        [owner, name]
+    );
+    
+    if (result.rows.length === 0) {
+        return null;
+    }
+    
+    const repo = result.rows[0];
+    
+    // Get collaborators for this repository
+    
+    // Format to match the old structure
+    return {
+        id: repo.id,
+        name: repo.name,
+        owner: repo.owner,
+        isPrivate: repo.is_private,
+        createdAt: repo.created_at
+    };
+},
+    async create(name, owner, isPrivate = false) {
+    const repoId = Math.random().toString(36).substring(2, 10);
+    // Insert the repository
+    await pool.query(
+        `INSERT INTO repositories (id, name, owner, is_private, protected_channels, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [repoId, name, owner, isPrivate, ['main'], new Date().toISOString()]
+    );
+    
+    // Return the created repository (matching old format)
+    return {
+        id: repoId,
+        name: name,
+        owner: owner,
+        isPrivate: isPrivate,
+        collaborators: [],
+        protectedChannels: ['main'],
+        createdAt: new Date().toISOString()
+    };
+   },
 
-    getByOwnerAndName(owner, name) {
-        return this.getAll().find(r => r.name === name && r.owner === owner) || null;
-    },
-
-    getByName(name, ownerHint = null) {
-        const all = this.getAll();
-        // If an owner hint is provided, prefer exact owner+name match
-        if (ownerHint) {
-            const exact = all.find(r => r.name === name && r.owner === ownerHint);
-            if (exact) return exact;
-        }
-        // Otherwise return first match (for backward compat with single-owner setups)
-        return all.find(r => r.name === name) || null;
-    },
-
-    saveAll(data) {
-        fs.writeFileSync(REPO_META_FILE, JSON.stringify(data, null, 2));
-    },
-
-    create(name, owner, isPrivate = false) {
-        const data = this.getAll();
-        if (data.find(r => r.name === name && r.owner === owner)) throw new Error('Repository already exists for this owner');
+    async getUserRole(owner, name, username,repoId=null) {
+    // First, get the repository
+     ;
+       let isPrivate=null;
+      if (!repoId){
+        // Get the repository from database
+        const repoResult = await pool.query(
+            'SELECT id,is_private as "isPrivate" FROM repositories WHERE owner = $1 AND name = $2',
+            [owner, name]
+        );
         
-        const newRepo = { 
-            id: Math.random().toString(36).substring(2, 10),
+        if (repoResult.rows.length === 0) {
+            return null; // Repository not found
+        }
+
+        repoId = repoResult.rows[0].id;
+        isPrivate=repoResult.rows[0].isPrivate;
+      }
+      
+      if(owner === username) {
+          return 'owner';
+        }
+           
+        const collabResult = await pool.query(
+        'SELECT role FROM collaborators WHERE repository_id = $1 AND username = $2',
+        [repoId, username]
+         );        
+         if(collabResult.rows.length!=0){
+           return collabResult.rows[0].role
+         }
+    
+
+    // Default for public repos
+         return isPrivate ? null : 'viewer';
+},
+
+// Get dashboard repositories (4 personal + 4 collaborated + 4 public)
+async getVisible(username) {
+    // Get 4 personal repositories (owned by user)
+    const personalResult = await pool.query(
+        `SELECT 
+            id,
             name, 
             owner, 
-            isPrivate, 
-            collaborators: [], // Array of { username, role }
-            protectedChannels: ['main'], // Default protected channel
-            createdAt: new Date().toISOString() 
-        };
-        data.push(newRepo);
-        this.saveAll(data);
-        return newRepo;
-    },
+            is_private as "isPrivate", 
+            created_at as "createdAt",
+            'personal' as "type",
+            false as "isCollaborated"
+         FROM repositories
+         WHERE owner = $1
+         ORDER BY created_at DESC
+         LIMIT 4`,
+        [username]
+    );
+    
+    // Get 4 collaborated repositories (user has access to but doesn't own)
+    const collabResult = await pool.query(
+        `SELECT 
+            r.id,
+            r.name, 
+            r.owner, 
+            r.is_private as "isPrivate", 
+            r.created_at as "createdAt",
+            'collaborated' as "type",
+            true as "isCollaborated",
+            c.role
+         FROM repositories r
+         JOIN collaborators c ON r.id = c.repository_id
+         WHERE c.username = $1 AND r.owner != $1
+         ORDER BY r.created_at DESC
+         LIMIT 4`,
+        [username]
+    );
+    
+    // Get 4 public repositories (not owned by user, not collaborated)
+    const publicResult = await pool.query(
+        `SELECT 
+            r.id,
+            r.name, 
+            r.owner, 
+            r.is_private as "isPrivate", 
+            r.created_at as "createdAt",
+            'public' as "type",
+            false as "isCollaborated"
+         FROM repositories r
+         WHERE 
+            r.is_private = false 
+            AND r.owner != $1
+            AND NOT EXISTS (
+                SELECT 1 FROM collaborators 
+                WHERE repository_id = r.id 
+                AND username = $1
+            )
+         ORDER BY r.created_at DESC
+         LIMIT 4`,
+        [username]
+    );
+    
+    // Combine all results
+    const allRepos = [
+        ...personalResult.rows,
+        ...collabResult.rows,
+        ...publicResult.rows
+    ];
+    
+    return allRepos;
+}
+,async getPersonalRepos(username, page = 1, limit = 4) {
+    const offset = (page - 1) * limit;
+    
+    const countResult = await pool.query(
+        `SELECT COUNT(*) as total
+         FROM repositories
+         WHERE owner = $1`,
+        [username]
+    );
+    
+    const total = parseInt(countResult.rows[0].total);
+    
+    const result = await pool.query(
+        `SELECT 
+            id,
+            name, 
+            owner, 
+            is_private as "isPrivate", 
+            created_at as "createdAt"
+         FROM repositories
+         WHERE owner = $1
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [username, limit, offset]
+    );
+    
+    return {
+        repositories: result.rows,
+        pagination: {
+            currentPage: page,
+            totalPages: Math.ceil(total / limit),
+            totalItems: total,
+            itemsPerPage: limit,
+            hasNext: offset + limit < total,
+            hasPrev: page > 1
+        }
+    };
+},
+async getCollabRepos(username, page = 1, limit = 4) {
+    const offset = (page - 1) * limit;
+    
+    const countResult = await pool.query(
+        `SELECT COUNT(*) as total
+         FROM repositories r
+         JOIN collaborators c ON r.id = c.repository_id
+         WHERE c.username = $1 AND r.owner != $1`,
+        [username]
+    );
+    
+    const total = parseInt(countResult.rows[0].total);
+    
+    const result = await pool.query(
+        `SELECT 
+            r.id,
+            r.name, 
+            r.owner, 
+            r.is_private as "isPrivate", 
+            r.created_at as "createdAt",
+            c.role
+         FROM repositories r
+         JOIN collaborators c ON r.id = c.repository_id
+         WHERE c.username = $1 AND r.owner != $1
+         ORDER BY r.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [username, limit, offset]
+    );
+    
+    return {
+        repositories: result.rows,
+        pagination: {
+            currentPage: page,
+            totalPages: Math.ceil(total / limit),
+            totalItems: total,
+            itemsPerPage: limit,
+            hasNext: offset + limit < total,
+            hasPrev: page > 1
+        }
+    };
+},
+async getPublicRepos(username, page = 1, limit = 4) {
+    const offset = (page - 1) * limit;
+    
+    const countResult = await pool.query(
+        `SELECT COUNT(*) as total
+         FROM repositories r
+         WHERE 
+            r.is_private = false 
+            AND r.owner != $1
+            AND NOT EXISTS (
+                SELECT 1 FROM collaborators 
+                WHERE repository_id = r.id 
+                AND username = $1
+            )`,
+        [username]
+    );
+    
+    const total = parseInt(countResult.rows[0].total);
+    
+    const result = await pool.query(
+        `SELECT 
+            r.id,
+            r.name, 
+            r.owner, 
+            r.is_private as "isPrivate", 
+            r.created_at as "createdAt"
+         FROM repositories r
+         WHERE 
+            r.is_private = false 
+            AND r.owner != $1
+            AND NOT EXISTS (
+                SELECT 1 FROM collaborators 
+                WHERE repository_id = r.id 
+                AND username = $1
+            )
+         ORDER BY r.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [username, limit, offset]
+    );
+    
+    return {
+        repositories: result.rows,
+        pagination: {
+            currentPage: page,
+            totalPages: Math.ceil(total / limit),
+            totalItems: total,
+            itemsPerPage: limit,
+            hasNext: offset + limit < total,
+            hasPrev: page > 1
+        }
+    };
+},
 
-    getUserRole(owner, name, username) {
-        const repo = this.getByOwnerAndName(owner, name);
-        if (!repo) return null;
-        if (repo.owner === username) return 'owner';
-        
-        const collab = repo.collaborators?.find(c => c.username === username);
-        if (collab) return collab.role;
-
-        return repo.isPrivate ? null : 'viewer'; // Default for public repos
-    },
-
-    getVisible(username) {
-        const data = this.getAll();
-        return data.filter(r => {
-            if (!r.isPrivate) return true;
-            if (r.owner === username) return true;
-            return r.collaborators?.some(c => c.username === username);
-        });
-    },
-
-    canAccess(owner, name, username, requiredLevel = 'read') {
-        const role = this.getUserRole(owner, name, username);
+    async canAccess(owner, name, username, requiredLevel = 'read',repoId) {
+        const role =await  this.getUserRole(owner, name, username,repoId);
+       
         if (!role) return false;
 
         const levels = {
@@ -88,60 +313,182 @@ const repoStore = {
         return levels[requiredLevel].includes(role);
     },
 
-    addCollaborator(owner, name, username, role = 'developer') {
-        const data = this.getAll();
-        const repo = data.find(r => r.name === name && r.owner === owner);
-        if (!repo) throw new Error('Repository not found');
-        if (!repo.collaborators) repo.collaborators = [];
+    async  addCollaborator(owner, name, username, role = 'developer', repoId = null) {
+   
+    
+    // Use existing repo if provided, otherwise fetch it
+    if(!repoId){
+        const repoResult = await pool.query(
+            'SELECT id FROM repositories WHERE owner = $1 AND name = $2',
+            [owner, name]
+        );
         
-        const existing = repo.collaborators.find(c => c.username === username);
-        if (existing) {
-            existing.role = role;
-        } else {
-            repo.collaborators.push({ username, role });
+        if (repoResult.rows.length === 0) {
+            throw new Error('Repository not found');
         }
-        
-        this.saveAll(data);
-        return repo;
-    },
-
-    removeCollaborator(owner, name, username) {
-        const data = this.getAll();
-        const repo = data.find(r => r.name === name && r.owner === owner);
-        if (!repo) throw new Error('Repository not found');
-        if (!repo.collaborators) return repo;
-        repo.collaborators = repo.collaborators.filter(c => c.username !== username);
-        this.saveAll(data);
-        return repo;
-    },
-
-    toggleProtectedChannel(owner, name, channel) {
-        const data = this.getAll();
-        const repo = data.find(r => r.name === name && r.owner === owner);
-        if (!repo) throw new Error('Repository not found');
-        if (!repo.protectedChannels) repo.protectedChannels = [];
-        
-        const idx = repo.protectedChannels.indexOf(channel);
-        if (idx === -1) {
-            repo.protectedChannels.push(channel);
-        } else {
-            repo.protectedChannels.splice(idx, 1);
-        }
-        this.saveAll(data);
-        return repo;
-    },
-
-    isChannelProtected(owner, name, channel) {
-        const repo = this.getByOwnerAndName(owner, name);
-        if (!repo || !repo.protectedChannels) return false;
-        return repo.protectedChannels.includes(channel);
-    },
-
-    delete(owner, name) {
-        const data = this.getAll();
-        const filtered = data.filter(r => !(r.name === name && r.owner === owner));
-        this.saveAll(filtered);
+        repoId = repoResult.rows[0].id;
     }
+    
+     
+    
+    // Check if collaborator already exists
+    const existingCollab = await pool.query(
+        'SELECT role FROM collaborators WHERE repository_id = $1 AND username = $2',
+        [repoId, username]
+    );
+    
+    if (existingCollab.rows.length > 0) {
+        // Update existing collaborator's role
+        await pool.query(
+            'UPDATE collaborators SET role = $1 WHERE repository_id = $2 AND username = $3',
+            [role, repoId, username]
+        );
+    } else {
+        // Add new collaborator
+        await pool.query(
+            'INSERT INTO collaborators (repository_id, username, role) VALUES ($1, $2, $3)',
+            [repoId, username, role]
+        );
+    }
+    
+    }
+,
+    async getCollaborators(owner,name,repoId){
+        if(!repoId){
+            repoId=(await this.getByOwnerAndName(owner,name)).id
+        }
+        const collabResult = await pool.query(
+            'SELECT username, role FROM collaborators WHERE repository_id = $1',
+            [repoId]
+        );
+        return collabResult.rows;
+
+    },
+    async removeCollaborator(owner, name, username, repoId = null) {
+    
+    try {
+        // Use existing repo if provided, otherwise fetch it
+        if (!repoId) {
+            const repoResult = await pool.query(
+                'SELECT id, owner FROM repositories WHERE owner = $1 AND name = $2',
+                [owner, name]
+            );
+            
+            if (repoResult.rows.length === 0) {
+                throw new Error(`Repository '${owner}/${name}' not found`);
+            }
+            repoId = repoResult.rows[0].id;
+        }
+        
+        // Prevent removing the owner
+        if (username === owner) {
+            throw new Error('Cannot remove repository owner as collaborator');
+        }
+        
+        // Delete the collaborator
+        const result = await pool.query(
+            'DELETE FROM collaborators WHERE repository_id = $1 AND username = $2 RETURNING username, role',
+            [repoId, username]
+        );
+        
+        if (result.rows.length === 0) {
+            console.log(`Collaborator '${username}' was not a collaborator of '${owner}/${name}'`);
+        } else {
+            console.log(`Removed collaborator '${username}' with role '${result.rows[0].role}' from '${owner}/${name}'`);
+        }
+        
+    } catch (error) {
+        console.error('Error removing collaborator:', error);
+        throw error;
+    }
+    
+
+},
+    async getProtectedCh(repoId) {
+           const result = await pool.query(
+               'SELECT protected_channels FROM repositories WHERE id = $1',
+               [repoId]
+           );
+           
+           if (result.rows.length === 0) {
+               throw new Error('Repository not found');
+           }
+           
+           return result.rows[0].protected_channels || [];
+     }
+,
+
+    async toggleProtectedChannel(owner, name, channel, repoId = null) {
+    
+    // Use existing repo if provided, otherwise fetch it
+    if(!repoId) {
+        const repoResult = await pool.query(
+            'SELECT id, protected_channels FROM repositories WHERE owner = $1 AND name = $2',
+            [owner, name]
+        );
+        
+        if (repoResult.rows.length === 0) {
+            throw new Error('Repository not found');
+        }
+        repoId = repoResult.rows[0].id;
+    }
+    
+    
+    let protectedChannels = this.getProtectedCh(repoId);
+    
+    // Toggle the channel
+    const idx = protectedChannels.indexOf(channel);
+    if (idx === -1) {
+        protectedChannels.push(channel);
+    } else {
+        protectedChannels.splice(idx, 1);
+    }
+    
+    // Update the database
+    await pool.query(
+        'UPDATE repositories SET protected_channels = $1 WHERE id = $2',
+        [protectedChannels, repoId]
+    );
+    
+   
+    return ;
+},
+
+    
+
+    async delete(owner, repoName) {
+    // First, get the repository to ensure it exists and get its ID
+    const repoResult = await pool.query(
+        'SELECT id FROM repositories WHERE owner = $1 AND name = $2',
+        [owner, repoName]
+    );
+    
+    if (repoResult.rows.length === 0) {
+        throw new Error(`Repository '${owner}/${repoName}' not found`);
+    }
+    
+    const repoId = repoResult.rows[0].id;
+    
+    // Delete from database (cascading will delete collaborators automatically)
+    await pool.query(
+        'DELETE FROM repositories WHERE id = $1',
+        [repoId]
+    );
+    
+    // Delete the physical repository files
+    const fullPath = path.join(REPOS_PATH, owner, repoName);
+    if (fs.existsSync(fullPath)) {
+        fs.rmSync(fullPath, { recursive: true, force: true });
+        console.log(`SSH: Deleted repository files at ${fullPath}`);
+    }
+    
+    // Clear any cached data for this repository
+    if (clearRepoCache) {
+        clearRepoCache(owner, repoName);
+    }
+    
+    return { success: true, message: `Repository '${owner}/${repoName}' deleted successfully` };
+}
 };
 
 module.exports = repoStore;

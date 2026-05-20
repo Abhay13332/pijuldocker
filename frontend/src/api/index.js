@@ -1,4 +1,4 @@
-const API_BASE = `http://${window.location.hostname}:3001/api`;
+const API_BASE = `http://${window.location.hostname}:5176/api`;
 
 const getHeaders = () => {
     const token = localStorage.getItem('token');
@@ -15,9 +15,9 @@ export const login = async (username, password) => {
         body: JSON.stringify({ username, password })
     });
     const data = await res.json();
-    if (data.token) {
-        localStorage.setItem('token', data.token);
+    if (data) {
         localStorage.setItem('username', data.username);
+        localStorage.setItem('isLoggedIn',true)
     }
     return data;
 };
@@ -30,7 +30,7 @@ export const register = async (username, password) => {
     });
     const data = await res.json();
     if (data.token) {
-        localStorage.setItem('token', data.token);
+        localStorage.setItem('isLoggedIn', true);
         localStorage.setItem('username', data.username);
     }
     return data;
@@ -70,6 +70,11 @@ export const fetchRepos = async () => {
     const res = await fetch(`${API_BASE}/repos`, { headers: getHeaders() });
     return res.json();
 };
+export const fetchRepoMeta= async (owner,name) =>{
+    const res = await fetch(`${API_BASE}/repo/${repoPath(owner,name)}/meta`, { headers: getHeaders() });
+    if(!res.ok) return null;
+    return res.json();
+}
 
 export const createRepo = async (name, isPrivate = false) => {
     const res = await fetch(`${API_BASE}/repos`, {
@@ -100,6 +105,10 @@ export const fetchPatchDetail = async (owner, name, hash, channel) => {
     return res.json();
 };
 
+export const fetchCollaborators = async (owner,repoName) =>{
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/collaborators`)
+    return res.json();
+}
 export const addCollaborator = async (owner, repoName, username, role = 'developer') => {
     const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/collaborators`, {
         method: 'POST',
@@ -185,7 +194,7 @@ export const mergeDiscussion = async (owner, repoName, id) => {
 };
 export const getMergeConflicts =async (owner,repoName,id)=>{
      const res = await fetch(`${API_BASE}/repos/${repoPath(owner, repoName)}/discussions/${id}/mergeconflicts`, {
-        method: 'POST',
+       
         headers: getHeaders()
     });
     return res.json();
@@ -214,3 +223,8 @@ export const toggleProtection = async (owner, repoName, channel) => {
     });
     return res.json();
 };
+export const fetchProtectedCh=async(owner,name)=>{
+    const res = await fetch(`${API_BASE}/repos/${repoPath(owner, name)}/protected-channels`)
+    return res.json();
+
+}
