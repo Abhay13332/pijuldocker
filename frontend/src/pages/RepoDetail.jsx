@@ -118,23 +118,9 @@ const RepoDetail = () => {
     const [hostname, setHostname] = useState(window.location.hostname);
     const [ip, setIp] = useState('');
 
-    useEffect(() => {
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
-            setIp(hostname);
-            return;
-        }
+   
 
-        fetch(`https://dns.google/resolve?name=${hostname}&type=A`)
-             .then(res => res.json())
-             .then(data => {
-                 if (data && data.Answer && data.Answer.length > 0) {
-                     setIp(data.Answer[0].data);
-                 }
-             })
-             .catch(err => console.error('Failed to resolve server IP via DNS', err));
-    }, [hostname]);
-
-    const displayHost = ip || hostname;
+    const displayHost = import.meta.env.VITE_PUBLIC_IP||hostname;
     const hasConflicts=conflicts!=null && conflicts.length!=0;
     useEffect(() => {
         loadRepoData();

@@ -15,6 +15,7 @@ services:
       - POSTGRES_DB=pijulDB
       - USE_POSTGRES=true
       - JWT_SECRET=top-secret-key
+      - VITE_PUBLIC_IP=111.111.111.111
       - PORT=3001
     volumes:
       - pijul_repos:/app/repos
