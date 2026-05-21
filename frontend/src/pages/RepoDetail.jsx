@@ -146,6 +146,7 @@ console.log(log);
             const [repoData, channelsData] = await Promise.all([
                 fetchRepoMeta(owner,name),
                 fetchChannels(owner, name)
+                
             ]);
             console.log(repoData);
             setRepoMeta(repoData);
@@ -424,8 +425,7 @@ console.log(log);
         setCurrProtectedCh(protectedch);
     }
     
-    const userRole = repoMeta?.owner === currentUsername ? 'owner' :
-                     currCollab?.find(c => c.username === currentUsername)?.role || 'viewer';
+    const userRole = repoMeta ?repoMeta.role:null;
     const canManage = ['owner', 'maintainer'].includes(userRole);
     const currentChannel = channels.find(c => c.isCurrent)?.name || 'main';
 

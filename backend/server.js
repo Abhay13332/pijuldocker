@@ -142,6 +142,7 @@ const checkRepoAccess =  (level) => async(req, res, next) => {
     req.repo = repo;
     if (await repoStore.canAccess(owner, repoName, username, level,repo.id)) {
         next();
+       
     } else {
         res.status(403).json({ error: `Insufficient permissions (requires ${level})` });
     }
@@ -185,6 +186,7 @@ app.get('/api/repos/public',authenticateToken,async(req,res)=>{
     }
 });//ok
 app.get('/api/repo/:owner/:name/meta' ,optionalAuthenticateToken,checkRepoAccess('read'),async(req,res)=>{
+    req.repo.role=await  repoStore.getUserRole(req.repo.owner, req.repo.name, req.user.username,req.repo.id)
     res.json(req.repo);
 });
 //ok
