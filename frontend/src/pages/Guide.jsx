@@ -176,7 +176,7 @@ const Guide = () => {
                                 <p className="text-sm text-muted-foreground">
                                     Run this in your terminal to generate an SSH key, configure your connection, and set up your Pijul identity in one go:
                                 </p>
-                                <CodeBlock>{`bash -c "$(curl -fsSL http://${window.location.host}${window.location.port ? ':' + window.location.port : ''}/setup.sh)"`}</CodeBlock>
+                                <CodeBlock>{`bash -c "$(curl -fsSL https://${window.location.host}${window.location.port ? ':' + window.location.port : ''}/setup.sh)"`}</CodeBlock>
 
                                 <div className="bg-muted/30 border rounded-xl p-4 mt-4">
                                     <h4 className="font-semibold text-sm mb-3">Recommended Answers:</h4>
