@@ -115,6 +115,26 @@ const RepoDetail = () => {
         navigate(`/repos/${owner}/${name}/${newTab}`);
     };
     const currentUsername = localStorage.getItem('username');
+    const [hostname, setHostname] = useState(window.location.hostname);
+    const [ip, setIp] = useState('');
+
+    useEffect(() => {
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            setIp(hostname);
+            return;
+        }
+
+        fetch(`https://dns.google/resolve?name=${hostname}&type=A`)
+             .then(res => res.json())
+             .then(data => {
+                 if (data && data.Answer && data.Answer.length > 0) {
+                     setIp(data.Answer[0].data);
+                 }
+             })
+             .catch(err => console.error('Failed to resolve server IP via DNS', err));
+    }, [hostname]);
+
+    const displayHost = ip || hostname;
     const hasConflicts=conflicts!=null && conflicts.length!=0;
     useEffect(() => {
         loadRepoData();
@@ -463,9 +483,9 @@ console.log(log);
                                 <div className="p-2">
                                     <div className="flex items-center gap-2 bg-muted p-2 rounded-none border">
                                         <code className="text-xs truncate flex-1">
-                                            pijul clone {currentUsername}@{window.location.hostname}:/{repoMeta?.owner}/{name} --channel {selectedChannel}
+                                            pijul clone {currentUsername}@{displayHost}:/{repoMeta?.owner}/{name} --channel {selectedChannel}
                                         </code>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul clone ${currentUsername}@${window.location.hostname}:/${repoMeta?.owner}/${name}  --channel ${selectedChannel}`)}>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul clone ${currentUsername}@${displayHost}:/${repoMeta?.owner}/${name}  --channel ${selectedChannel}`)}>
                                             <Copy className="w-3 h-3" />
                                         </Button>
                                     </div>
@@ -920,9 +940,9 @@ console.log(log);
                                                 </p>
                                                 <div className="bg-background border rounded-none p-2 flex items-center justify-between">
                                                     <code className="text-[10px] font-mono text-primary">
-                                                        pijul push {currentUsername}@{window.location.hostname}:/{repoMeta?.owner}/{name} --to-channel {selectedPR.sourceChannel}
+                                                        pijul push {currentUsername}@{displayHost}:/{repoMeta?.owner}/{name} --to-channel {selectedPR.sourceChannel}
                                                     </code>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul push ${window.location.hostname}:/${repoMeta?.owner}/${name} --to-channel ${selectedPR.sourceChannel}`)}>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigator.clipboard.writeText(`pijul push ${currentUsername}@${displayHost}:/${repoMeta?.owner}/${name} --to-channel ${selectedPR.sourceChannel}`)}>
                                                         <Copy className="w-3 h-3" />
                                                     </Button>
                                                 </div>
