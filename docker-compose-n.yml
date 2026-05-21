@@ -1,0 +1,101 @@
+version: '3.9'
+
+# Define networks
+networks:
+  pijul-network:
+    driver: bridge
+    name: pijul-network
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: docker.io/postgres:16-alpine
+    container_name: pijul_postgres
+    restart: unless-stopped
+    networks:
+      - pijul-network
+    environment:
+      POSTGRES_USER: pijulserv
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: pijulDB
+    command: >
+      postgres
+      -c max_connections=20
+      -c shared_buffers=64MB
+      -c work_mem=2MB
+      -c maintenance_work_mem=32MB
+      -c effective_cache_size=256MB
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pijulserv -d pijulDB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M  # Reduced for B1s (1GB total)
+        reservations:
+          memory: 128M
+
+  # Pijul Application
+  pijulserv:
+    image: docker.io/abhay1302/pijulserv:v1.6
+    container_name: pijulserv-app
+    restart: unless-stopped
+    networks:
+      - pijul-network
+    ports:
+      - "45232:2222"  # SSH port (changed from 45232 to 2222 for consistency)
+      # REMOVED 3001:3001 - Nginx handles external access
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=pijulserv
+      - POSTGRES_PASSWORD=mysecretpassword
+      - POSTGRES_DB=pijulDB
+      - USE_POSTGRES=true
+      - JWT_SECRET=top-secret-key
+      - PORT=3001
+    volumes:
+      - pijul_repos:/app/repos
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384M  # Reduced for B1s
+        reservations:
+          memory: 256M
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: docker.io/nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    networks:
+      - pijul-network  # Same network as other services
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro,z
+      - ./nginx/ssl:/etc/nginx/ssl:ro,z
+      - ./www:/var/www/html:ro,z
+    depends_on:
+      - pijulserv
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+
+volumes:
+  pijul_repos:
+    name: pijul_repos
+  pgdata:
+    name: pijul_pgdata
