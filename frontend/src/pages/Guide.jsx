@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 
 const Guide = () => {
     const hostname = window.location.hostname;
-
+    const username=localStorage.getItem("username")
     return (
         <Layout>
             <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-500 pb-12">
@@ -114,7 +114,7 @@ const Guide = () => {
                             <div>
                                 <h4 className="font-semibold mb-2">Clone a repository</h4>
                                 <div className="bg-background border rounded-md p-3 overflow-x-auto">
-                                    <code className="text-sm font-mono text-primary">pijul clone pijulserv@{hostname}:/&lt;repo-name&gt;</code>
+                                    <code className="text-sm font-mono text-primary">pijul clone {username}@{hostname}:/&lt;username&gt;/&lt;repo-name&gt;</code>
                                 </div>
                             </div>
 
@@ -122,9 +122,9 @@ const Guide = () => {
                                 <h4 className="font-semibold mb-2">Record and Push changes</h4>
                                 <div className="bg-background border rounded-md p-3 overflow-x-auto whitespace-pre">
                                     <code className="text-sm font-mono text-primary">
-{`pijul add .
+{`pijul add -r .
 pijul record -m "Initial patch"
-pijul push pijulserv@${hostname}:/<repo-name>`}
+pijul push ${username}@${hostname}:/<username>/<repo-name>`}
                                     </code>
                                 </div>
                             </div>
