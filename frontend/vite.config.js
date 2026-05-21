@@ -16,6 +16,6 @@ export default defineConfig({
         changeOrigin: true,              // Changes the origin header to match the target URL
         secure: false,                   // Disables SSL verification for development HTTP
       }
-    }
+    } 
   }
 })
