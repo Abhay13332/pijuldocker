@@ -1,4 +1,5 @@
-const API_BASE = `https://${window.location.hostname}:${window.location.port}/api`;
+
+const API_BASE = import.meta.env.DEV ? `http://${window.location.hostname}:${window.location.port}/api` : `https://${window.location.hostname}:${window.location.port}/api`;
 
 const getHeaders = () => {
     const token = localStorage.getItem('token');

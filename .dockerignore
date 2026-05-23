@@ -21,3 +21,5 @@ backend/data/
 .DS_Store
 Thumbs.db
 .env
+
+backend/key-git.pem

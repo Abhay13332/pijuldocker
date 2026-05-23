@@ -10,20 +10,24 @@ const cookieParser = require('cookie-parser');
 const { initDatabase } = require('./db');
 const repoStore = require('./repoStore');
 const discussionStore = require('./discussionStore');
-const app = express();
-const PORT = 3001;
-
+const gitRouter=require('./routes/github-routes/route');
+const  { authenticateToken, optionalAuthenticateToken }= require('./routes/auth/tokens');
 const JWT_SECRET = process.env.JWT_SECRET||"my-secret-password";
+
+const authRoute=require('./routes/auth/auth-route'); 
+
+const PORT = 3001;
+const app = express();
 
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
+app.use("/api/github",gitRouter);
 app.use(cookieParser()); 
-
-app.use(bodyParser.json());
-
+app.use(express.json());
+app.use(authRoute);
 
 (async () => {
     try {
@@ -43,72 +47,9 @@ app.use(bodyParser.json());
     }
 })();
 
-//ok
-// Auth Middleware
-const authenticateToken = (req, res, next) => {
-    let token = req.cookies?.token;
-    if (!token) return res.sendStatus(401);
-    
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
-    });
-};
-//ok
-const optionalAuthenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    let token = req.cookies?.token;
-    if (!token) {
-        req.user = null;
-        return next();
-    }
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        req.user = err ? null : user;
-        next();
-    });
-};
 
 
 // --- API Routes ---
-//ok
-app.post('/api/auth/login', async (req, res) => {
-    const { username, password } = req.body;
-    const user = await users.findByUsername(username);
-    if (!user || !(await (bcrypt.compare(password,user.password)))) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
-    res.cookie('token', token, {
-          httpOnly: true,      // Prevents client-side JS from accessing the cookie
-          sameSite:'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
-        });
-    res.json({  username: user.username });
-});
-//ok
-app.post('/api/auth/register', async (req, res) => {
-    const { username, password } = req.body;
-    try {
-        const user =await  users.create(username, password);
-        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET);
-        res.cookie('token', token, {
-          httpOnly: true,      // Prevents client-side JS from accessing the cookie
-          sameSite: 'strict',
-          maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
-        });
-
-        res.json({ token, username: user.username });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
-});
-//ok
-app.get('/api/user/profile', authenticateToken, async(req, res) => {
-    const [user,keys] =await Promise.all([ users.findByUsername(req.user.username),users.getsshkeys(req.user.username)]);
-
-    const { password, ...userWithoutPassword } = user;
-    userWithoutPassword.sshKeys=keys;
-    res.json(userWithoutPassword);
-});
 
 // SSH Key Management
 //ok

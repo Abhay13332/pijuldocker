@@ -10,7 +10,7 @@ frontend/dist/
 # We ignore the entire data and repos directories as they contain server state
 data/
 repos/
-
+backend/key-git.pem
 # Logs
 *.log
 npm-debug.log*

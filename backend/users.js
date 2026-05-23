@@ -24,7 +24,7 @@ const users = {
     return result.rows[0] || null;
     },
 
-   async create(username, password) {
+   async create(username, password,gitEncryptedToken) {
        const existingUser = await pool.query(
         'SELECT username FROM users WHERE username = $1',
         [username]
@@ -40,7 +40,7 @@ const users = {
     
     // Insert user into database
     await pool.query(
-        'INSERT INTO users (id, username, password, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)',
+        'INSERT INTO users (id, username, password) VALUES ($1, $2, $3)',
         [userId, username, hashedPassword]
     );
     

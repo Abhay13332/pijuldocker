@@ -3,7 +3,10 @@ version: '3.9'
 services:
   pijulserv:
     image: docker.io/abhay1302/pijulserv:latest
-    build: .
+    build:
+      context: .
+      args:
+        - VITE_PUBLIC_IP=111.111.111.111
     container_name: pijulserv-app
     ports:
       - "3001:3001"   # Backend API + Frontend (served by Express)
