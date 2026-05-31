@@ -2,7 +2,7 @@ const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const REPOS_PATH = path.join(__dirname, '../repos');
+const REPOS_PATH = path.join(__dirname,process.env.PIJUL_REPO_PATH || '../repos/pijul_repos');
 
 function runPijul(owner, repoName, args) {
     return new Promise((resolve, reject) => {
@@ -175,7 +175,46 @@ const pijul = {
 
     async deleteChannel(owner, repoName, channelName) {
         return runPijul(owner, repoName, `channel delete ${channelName}`);
+    },
+     extractPijulChangeMessage(pijulRepoPath, changeHash) {
+    try {
+        // Get the change details using pijul change command
+        const output = execSync(`pijul change ${changeHash}`, { 
+            cwd: pijulRepoPath, 
+            encoding: 'utf8' 
+        });
+        
+        // Parse the output to extract message
+        // The message appears as: message = "content"
+        const messageMatch = output.match(/message = "([^"]*)"/);
+        
+        if (messageMatch && messageMatch[1]) {
+            return {
+                success: true,
+                hash: changeHash,
+                message: messageMatch[1]
+            };
+        }
+        
+        // Handle case where message is empty (like the root change in your example)
+        return {
+            success: true,
+            hash: changeHash,
+            message: "", // Empty message
+            raw: output
+        };
+        
+    } catch (error) {
+        console.error(`Error extracting message for change ${changeHash}: ${error.message}`);
+        return {
+            success: false,
+            error: error.message,
+            hash: changeHash,
+            message: null
+        };
     }
+}
+
 };
 
 module.exports = pijul;

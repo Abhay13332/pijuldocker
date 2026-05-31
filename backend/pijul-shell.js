@@ -16,7 +16,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const REPOS_PATH = process.env.REPOS_PATH || path.join(__dirname, '../repos');
+const REPOS_PATH = process.env.PIJUL_REPO_PATH || path.join(__dirname, '../repos/pijul_repos');
 const LOG_FILE = '/tmp/pijul-shell.log';
 
 function log(msg) {

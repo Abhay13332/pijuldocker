@@ -39,10 +39,10 @@ const users = {
     const userId = crypto.randomUUID();
     
     // Insert user into database
-    await pool.query(
-        'INSERT INTO users (id, username, password) VALUES ($1, $2, $3)',
-        [userId, username, hashedPassword]
-    );
+   await pool.query(
+    'INSERT INTO users (id, username, password_hash) VALUES ($1, $2, $3)',
+    [userId, username, hashedPassword]
+);
     
     return {
         id: userId,
@@ -69,11 +69,10 @@ const users = {
     
     // Insert the SSH key
     await pool.query(
-        `INSERT INTO ssh_keys (id, user_id, name, key, created_at) 
-         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
-        [keyId, userId, keyName, publicKey]
-    );
-    
+    `INSERT INTO ssh_keys (id, user_id, name, public_key, created_at) 
+     VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+    [keyId, userId, keyName, publicKey]
+);
    
 },
 
@@ -91,10 +90,10 @@ const users = {
     const userId = userResult.rows[0].id;
     
     // Check if the SSH key exists and belongs to this user
-    const keyResult = await pool.query(
-        'SELECT id FROM ssh_keys WHERE id = $1 AND user_id = $2',
-        [keyId, userId]
-    );
+   const keyResult = await pool.query(
+    'SELECT id, name, public_key, created_at FROM ssh_keys WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+);
     
     if (keyResult.rows.length === 0) {
         throw new Error('SSH key not found or does not belong to this user');
@@ -123,14 +122,14 @@ const users = {
     
     // Get all SSH keys for this user
     const keysResult = await pool.query(
-        'SELECT id, name, key, created_at FROM ssh_keys WHERE user_id = $1 ORDER BY created_at DESC',
+        'SELECT id, name, public_key, created_at FROM ssh_keys WHERE user_id = $1 ORDER BY created_at DESC',
         [userId]
     );
     
     return keysResult.rows.map(key => ({
         id: key.id,
         name: key.name,
-        key: key.key,
+        key: key.public_key,
         createdAt: key.created_at
     }));
 }

@@ -2,6 +2,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── View Transition: disable default cross-fade, let JS clip-path take over ── */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 9999; }
+
 :root {
   --background: oklch(0.9818 0.0054 95.0986);
   --foreground: oklch(0.3430 0.0252 98.0707);

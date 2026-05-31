@@ -1,14 +1,15 @@
-let {Octokit}=require("@octokit/core");
-let {createOAuthUserAuth}=require("@octokit/auth-oauth-user");
-let path=require("node:path");
+const {App} = require("@octokit/app");
+
 let fs=require("node:fs");
-let crypto=require("crypto");
+let { App } = require("@octokit/app");
+
 const GITHUB_PRIVATE_KEY = fs.readFileSync(process.env.GITHUB_KEY_PATH, "utf8");
 // let octoApp=new OctoApp({
 //     appId:process.env.GITHUB_APP_ID,
 //     privateKey:privateKey
 // })
-const ghApp = new App({
+
+const ghApp = new App({         
   appId: process.env.GITHUB_APP_ID,
   privateKey: GITHUB_PRIVATE_KEY,
   oauth: {

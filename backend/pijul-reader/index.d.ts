@@ -13,16 +13,23 @@ export interface ConflictInfo {
   path: string
   line?: number
   changes: Array<string>
+  /** Merged file content after applying branch_a changes onto branch_b. */
   content?: string
+  /** File content as it exists in branch_a before the merge. */
   contentA?: string
+  /** File content as it exists in branch_b before the merge. */
   contentB?: string
 }
+
+export declare function createPatchSession(repoPath: string, baseChannel: string, patchHashes: Array<string>): string
 
 export interface DiffLine {
   lineNumber: number
   content: string
   lineType: string
 }
+
+export declare function dropSession(sessionId: string): void
 
 /** A single file or directory entry returned by [`list_files`]. */
 export interface FileEntry {
@@ -39,6 +46,8 @@ export interface FileEntry {
  */
 export declare function getChangeDetails(repoPath: string, changeHash: string, channelName?: string | undefined | null): ChangeDetails
 
+export declare function getChannelPatchDiff(repoPath: string, sourceChannel: string, targetChannel: string): Array<PatchInfo>
+
 /**
  * High-level API: Read the raw byte content of a specific file in a channel.
  *
@@ -46,12 +55,33 @@ export declare function getChangeDetails(repoPath: string, changeHash: string, c
  */
 export declare function getFileContent(repoPath: string, channelName: string | undefined | null, filePath: string): Buffer
 
+export declare function getLatestPatches(repoPath: string, channelName?: string | undefined | null, limit?: number | undefined | null, sinceHash?: string | undefined | null): Array<string>
+
 /**
- * High-level API: Get merge conflicts when applying changes from branch_a to branch_b.
+ * Detect merge conflicts when applying changes from `branch_a` into `branch_b`.
  *
- * This does NOT modify the repository. It simulates the merge in a temporary channel.
+ * Non-destructive: operates on a temporary forked channel that is always
+ * cleaned up before returning, whether the call succeeds or fails.
+ * Concurrent calls against the same `repo_path` are automatically serialized.
  */
 export declare function getMergeConflicts(repoPath: string, branchA: string, branchB: string): Array<ConflictInfo>
+
+/**
+ * Build a complete dependency graph for a set of patches, including all
+ * transitive dependencies.
+ *
+ * Given a list of patch hashes, this function recursively fetches all patches
+ * they depend on, and returns a graph with metadata for each patch, as well
+ * as the roots (patches with no dependencies) and leaves (patches with no
+ * dependents) within the expanded set. The returned graph uses a hash map
+ * for fast O(1) node lookups, suitable for UI traversal.
+ *
+ * # Arguments
+ * * `repo_path` - Path to the Pijul repository (must contain `.pijul/`)
+ * * `_channel` - Channel name (not used for dependency resolution, kept for API consistency)
+ * * `patch_hashes` - List of patch hashes (base32 strings)
+ */
+export declare function getPatchDependencyGraph(repoPath: string, channel: string, patchHashes: Array<string>): PatchGraph
 
 /**
  * High-level API: List files in a Pijul repository for a given channel and path prefix.
@@ -59,6 +89,10 @@ export declare function getMergeConflicts(repoPath: string, branchA: string, bra
  * Returns a list of `FileEntry` structs.
  */
 export declare function getRepositoryFiles(repoPath: string, channelName: string | undefined | null, pathPrefix: string): Array<FileEntry>
+
+export declare function getSessionFileContent(sessionId: string, filePath: string): Buffer
+
+export declare function getSessionRecursiveTree(sessionId: string, maxFiles: number, startPath?: string | undefined | null): RecursiveTreeResult
 
 export interface HunkDetails {
   hunkType: string
@@ -72,4 +106,50 @@ export interface HunkDetails {
   newData?: string
   previous?: string
   remove?: string
+}
+
+export declare function listSessionDirectory(sessionId: string, pathPrefix: string): Array<FileEntry>
+
+/** The complete patch dependency graph. */
+export interface PatchGraph {
+  /** Map from patch hash to node information. O(1) lookup. */
+  nodes: Record<string, PatchGraphNode>
+  /** List of patches that have no dependencies (roots of the DAG). */
+  roots: Array<string>
+  /** List of patches that have no dependents (leaves of the DAG). */
+  leaves: Array<string>
+  /**
+   * Topological order: patches sorted so that dependencies come before
+   * dependents. This is the recommended order for applying patches.
+   */
+  topologicalOrder: Array<string>
+}
+
+/** A single node in the patch dependency graph. */
+export interface PatchGraphNode {
+  /** The patch hash (base32 encoded). */
+  hash: string
+  /** The commit message. */
+  message: string
+  /** Timestamp of the patch. */
+  timestamp: string
+  /** List of author names/identifiers. */
+  authors: Array<string>
+  /** Hashes of patches that this patch depends on (must be applied before). */
+  dependencies: Array<string>
+  /** Hashes of patches that depend on this patch. */
+  dependents: Array<string>
+}
+
+export interface PatchInfo {
+  hash: string
+  message: string
+  timestamp: string
+  authors: Array<string>
+}
+
+export interface RecursiveTreeResult {
+  entries: Array<FileEntry>
+  truncated: boolean
+  limitReachedAtDepth?: number
 }

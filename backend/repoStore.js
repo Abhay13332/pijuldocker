@@ -1,15 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const pool = require('./db');
-const REPO_META_FILE = path.join(__dirname, '../data/repos.json');
 
-if (!fs.existsSync(path.dirname(REPO_META_FILE))) {
-    fs.mkdirSync(path.dirname(REPO_META_FILE), { recursive: true });
-}
-
-if (!fs.existsSync(REPO_META_FILE)) {
-    fs.writeFileSync(REPO_META_FILE, JSON.stringify([]));
-}
+const REPOS_PATH = path.join(__dirname,process.env.PIJUL_REPO_PATH || '../repos/pijul_repos');
 
 const repoStore = {
     async getByOwnerAndName(owner, name) {
@@ -37,13 +30,14 @@ const repoStore = {
         createdAt: repo.created_at
     };
 },
-    async create(name, owner, isPrivate = false) {
+ 
+    async create(name, owner, isPrivate = false,isGitsyncEnabled = false) {
     const repoId = Math.random().toString(36).substring(2, 10);
     // Insert the repository
     await pool.query(
-        `INSERT INTO repositories (id, name, owner, is_private, protected_channels, created_at) 
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [repoId, name, owner, isPrivate, ['main'], new Date().toISOString()]
+        `INSERT INTO repositories (id, name, owner, is_private, is_gitsync_enabled, protected_channels, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [repoId, name, owner, isPrivate, isGitsyncEnabled, ['main'], new Date().toISOString()]
     );
     
     // Return the created repository (matching old format)
@@ -52,6 +46,7 @@ const repoStore = {
         name: name,
         owner: owner,
         isPrivate: isPrivate,
+        isGitsyncEnabled: isGitsyncEnabled,
         collaborators: [],
         protectedChannels: ['main'],
         createdAt: new Date().toISOString()
@@ -80,11 +75,10 @@ const repoStore = {
       if(owner === username) {
           return 'owner';
         }
-           
-        const collabResult = await pool.query(
-        'SELECT role FROM collaborators WHERE repository_id = $1 AND username = $2',
-        [repoId, username]
-         );        
+ const collabResult = await pool.query(
+    'SELECT role FROM collaborators WHERE repository_id = $1 AND user_id = (SELECT id FROM users WHERE username = $2)',
+    [repoId, username]
+);    
          if(collabResult.rows.length!=0){
            return collabResult.rows[0].role
          }
@@ -114,48 +108,48 @@ async getVisible(username) {
     );
     
     // Get 4 collaborated repositories (user has access to but doesn't own)
-    const collabResult = await pool.query(
-        `SELECT 
-            r.id,
-            r.name, 
-            r.owner, 
-            r.is_private as "isPrivate", 
-            r.created_at as "createdAt",
-            'collaborated' as "type",
-            true as "isCollaborated",
-            c.role
-         FROM repositories r
-         JOIN collaborators c ON r.id = c.repository_id
-         WHERE c.username = $1 AND r.owner != $1
-         ORDER BY r.created_at DESC
-         LIMIT 4`,
-        [username]
-    );
-    
+const collabResult = await pool.query(
+    `SELECT 
+        r.id,
+        r.name, 
+        r.owner, 
+        r.is_private as "isPrivate", 
+        r.created_at as "createdAt",
+        'collaborated' as "type",
+        true as "isCollaborated",
+        c.role
+     FROM repositories r
+     JOIN collaborators c ON r.id = c.repository_id
+     JOIN users u ON c.user_id = u.id
+     WHERE u.username = $1 AND r.owner != $1
+     ORDER BY r.created_at DESC
+     LIMIT 4`,
+    [username]
+);
     // Get 4 public repositories (not owned by user, not collaborated)
-    const publicResult = await pool.query(
-        `SELECT 
-            r.id,
-            r.name, 
-            r.owner, 
-            r.is_private as "isPrivate", 
-            r.created_at as "createdAt",
-            'public' as "type",
-            false as "isCollaborated"
-         FROM repositories r
-         WHERE 
-            r.is_private = false 
-            AND r.owner != $1
-            AND NOT EXISTS (
-                SELECT 1 FROM collaborators 
-                WHERE repository_id = r.id 
-                AND username = $1
-            )
-         ORDER BY r.created_at DESC
-         LIMIT 4`,
-        [username]
-    );
-    
+ const publicResult = await pool.query(
+    `SELECT 
+        r.id,
+        r.name, 
+        r.owner, 
+        r.is_private as "isPrivate", 
+        r.created_at as "createdAt",
+        'public' as "type",
+        false as "isCollaborated"
+     FROM repositories r
+     WHERE 
+        r.is_private = false 
+        AND r.owner != $1
+        AND NOT EXISTS (
+            SELECT 1 FROM collaborators c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.repository_id = r.id 
+            AND u.username = $1
+        )
+     ORDER BY r.created_at DESC
+     LIMIT 4`,
+    [username]
+);
     // Combine all results
     const allRepos = [
         ...personalResult.rows,
@@ -205,33 +199,33 @@ async getVisible(username) {
 },
 async getCollabRepos(username, page = 1, limit = 4) {
     const offset = (page - 1) * limit;
-    
-    const countResult = await pool.query(
-        `SELECT COUNT(*) as total
-         FROM repositories r
-         JOIN collaborators c ON r.id = c.repository_id
-         WHERE c.username = $1 AND r.owner != $1`,
-        [username]
-    );
+   const countResult = await pool.query(
+    `SELECT COUNT(*) as total
+     FROM repositories r
+     JOIN collaborators c ON r.id = c.repository_id
+     JOIN users u ON c.user_id = u.id
+     WHERE u.username = $1 AND r.owner != $1`,
+    [username]
+);
     
     const total = parseInt(countResult.rows[0].total);
     
-    const result = await pool.query(
-        `SELECT 
-            r.id,
-            r.name, 
-            r.owner, 
-            r.is_private as "isPrivate", 
-            r.created_at as "createdAt",
-            c.role
-         FROM repositories r
-         JOIN collaborators c ON r.id = c.repository_id
-         WHERE c.username = $1 AND r.owner != $1
-         ORDER BY r.created_at DESC
-         LIMIT $2 OFFSET $3`,
-        [username, limit, offset]
-    );
-    
+   const result = await pool.query(
+    `SELECT 
+        r.id,
+        r.name, 
+        r.owner, 
+        r.is_private as "isPrivate", 
+        r.created_at as "createdAt",
+        c.role
+     FROM repositories r
+     JOIN collaborators c ON r.id = c.repository_id
+     JOIN users u ON c.user_id = u.id
+     WHERE u.username = $1 AND r.owner != $1
+     ORDER BY r.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [username, limit, offset]
+);
     return {
         repositories: result.rows,
         pagination: {
@@ -246,43 +240,44 @@ async getCollabRepos(username, page = 1, limit = 4) {
 },
 async getPublicRepos(username, page = 1, limit = 4) {
     const offset = (page - 1) * limit;
-    
     const countResult = await pool.query(
-        `SELECT COUNT(*) as total
-         FROM repositories r
-         WHERE 
-            r.is_private = false 
-            AND r.owner != $1
-            AND NOT EXISTS (
-                SELECT 1 FROM collaborators 
-                WHERE repository_id = r.id 
-                AND username = $1
-            )`,
-        [username]
-    );
+    `SELECT COUNT(*) as total
+     FROM repositories r
+     WHERE 
+        r.is_private = false 
+        AND r.owner != $1
+        AND NOT EXISTS (
+            SELECT 1 FROM collaborators c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.repository_id = r.id 
+            AND u.username = $1
+        )`,
+    [username]
+);
     
     const total = parseInt(countResult.rows[0].total);
     
-    const result = await pool.query(
-        `SELECT 
-            r.id,
-            r.name, 
-            r.owner, 
-            r.is_private as "isPrivate", 
-            r.created_at as "createdAt"
-         FROM repositories r
-         WHERE 
-            r.is_private = false 
-            AND r.owner != $1
-            AND NOT EXISTS (
-                SELECT 1 FROM collaborators 
-                WHERE repository_id = r.id 
-                AND username = $1
-            )
-         ORDER BY r.created_at DESC
-         LIMIT $2 OFFSET $3`,
-        [username, limit, offset]
-    );
+   const result = await pool.query(
+    `SELECT 
+        r.id,
+        r.name, 
+        r.owner, 
+        r.is_private as "isPrivate", 
+        r.created_at as "createdAt"
+     FROM repositories r
+     WHERE 
+        r.is_private = false 
+        AND r.owner != $1
+        AND NOT EXISTS (
+            SELECT 1 FROM collaborators c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.repository_id = r.id 
+            AND u.username = $1
+        )
+     ORDER BY r.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [username, limit, offset]
+);
     
     return {
         repositories: result.rows,
@@ -332,23 +327,23 @@ async getPublicRepos(username, page = 1, limit = 4) {
      
     
     // Check if collaborator already exists
-    const existingCollab = await pool.query(
-        'SELECT role FROM collaborators WHERE repository_id = $1 AND username = $2',
-        [repoId, username]
-    );
+ const existingCollab = await pool.query(
+    'SELECT role FROM collaborators WHERE repository_id = $1 AND user_id = (SELECT id FROM users WHERE username = $2)',
+    [repoId, username]
+);
     
     if (existingCollab.rows.length > 0) {
         // Update existing collaborator's role
-        await pool.query(
-            'UPDATE collaborators SET role = $1 WHERE repository_id = $2 AND username = $3',
-            [role, repoId, username]
-        );
+       await pool.query(
+    'UPDATE collaborators SET role = $1 WHERE repository_id = $2 AND user_id = (SELECT id FROM users WHERE username = $3)',
+    [role, repoId, username]
+);
     } else {
         // Add new collaborator
-        await pool.query(
-            'INSERT INTO collaborators (repository_id, username, role) VALUES ($1, $2, $3)',
-            [repoId, username, role]
-        );
+      await pool.query(
+    'INSERT INTO collaborators (repository_id, user_id, role) VALUES ($1, (SELECT id FROM users WHERE username = $2), $3)',
+    [repoId, username, role]
+);
     }
     
     }
@@ -357,10 +352,10 @@ async getPublicRepos(username, page = 1, limit = 4) {
         if(!repoId){
             repoId=(await this.getByOwnerAndName(owner,name)).id
         }
-        const collabResult = await pool.query(
-            'SELECT username, role FROM collaborators WHERE repository_id = $1',
-            [repoId]
-        );
+const collabResult = await pool.query(
+    'SELECT u.username, c.role FROM collaborators c JOIN users u ON c.user_id = u.id WHERE c.repository_id = $1',
+    [repoId]
+);
         return collabResult.rows;
 
     },
@@ -386,10 +381,10 @@ async getPublicRepos(username, page = 1, limit = 4) {
         }
         
         // Delete the collaborator
-        const result = await pool.query(
-            'DELETE FROM collaborators WHERE repository_id = $1 AND username = $2 RETURNING username, role',
-            [repoId, username]
-        );
+      const result = await pool.query(
+    'DELETE FROM collaborators WHERE repository_id = $1 AND user_id = (SELECT id FROM users WHERE username = $2) RETURNING user_id, role',
+    [repoId, username]
+);
         
         if (result.rows.length === 0) {
             console.log(`Collaborator '${username}' was not a collaborator of '${owner}/${name}'`);

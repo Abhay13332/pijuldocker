@@ -18,6 +18,17 @@ use std::path::Path;
 mod merge_conflicts;
 pub use merge_conflicts::*;
 
+pub mod pijul_diff_patch;
+pub use pijul_diff_patch::*;
+
+pub mod pijul_latest_patch;
+pub use pijul_latest_patch::*;
+
+pub mod pijul_patch_graph;
+pub use pijul_patch_graph::*;
+
+pub mod pijul_session;
+pub use pijul_session::*;
 use libpijul::{
     change::get_change_contents,
     changestore::{filesystem::FileSystem, ChangeStore},

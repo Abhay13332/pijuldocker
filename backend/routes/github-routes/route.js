@@ -2,9 +2,6 @@
 const express = require('express');
 const crypto = require('crypto');
 const {ghApp} = require('../../github/gittoken');
-const ghWebhhoks=ghApp.webhooks;
-
-
 
 const router = express.Router();
 router.use((req, res, next) => {

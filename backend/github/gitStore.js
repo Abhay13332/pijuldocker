@@ -6,7 +6,9 @@ const simpleGit = require("simple-git");
 const fs = require("fs-extra");
 const path = require("path");
 const { pool } = require("../db");
-const {ghApp}= require("./gittoken")
+const {ghApp}= require("./gittoken");
+const { get } = require("http");
+const pijul = require("../pijul");
 const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, "hex");
 const IV_LENGTH = 16;
 
@@ -35,132 +37,283 @@ const gitStore = {
     expiryDate.setTime(expiryDate.getTime() + 8 * 60 * 60 * 1000);
     return expiryDate;
   },
-  async storeUserToken(
-    username,
-    {
-      userToken = null,
-      gitRefreshToken = null,
-      installationId = null,
-      expiryDate = null,
-    },
-  ) {
-    try {
-      // Encrypt tokens only if they are provided
-      const encryptedUserToken = userToken ? userToken : null;
-      const encryptedRefreshToken = gitRefreshToken
-        ? this.encryptToken(gitRefreshToken)
-        : null;
 
-      // Check if user exists
-      const userResult = await pool.query(
-        `SELECT id FROM users WHERE username = $1`,
-        [username],
-      );
-
-      if (userResult.rows.length === 0) {
-        throw new Error(`User ${username} not found`);
-      }
-
-      const userId = userResult.rows[0].id;
-
-      // Use provided expiry date or calculate default (30 days from now)
-      const finalExpiryDate = expiryDate;
-
-      // Insert or update - only update provided fields
-      await pool.query(
-        `
-      INSERT INTO user_tokens (user_id, username, git_enc_token, git_refresh_token, installation_id, expired_at)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (user_id) DO UPDATE SET
-        username = EXCLUDED.username,
-        git_enc_token = COALESCE(EXCLUDED.git_enc_token, user_tokens.git_enc_token),
-        git_refresh_token = COALESCE(EXCLUDED.git_refresh_token, user_tokens.git_refresh_token),
-        installation_id = COALESCE(EXCLUDED.installation_id, user_tokens.installation_id),
-        expired_at = EXCLUDED.expired_at
-    `,
-        [
-          userId,
-          username,
-          encryptedUserToken,
-          encryptedRefreshToken,
-          installationId,
-          finalExpiryDate,
-        ],
-      );
-
-      return {
-        success: true,
-        message: "Tokens stored successfully",
-        stored: {
-          userToken: !!userToken,
-          refreshToken: !!gitRefreshToken,
-          installationId: !!installationId,
-          expiryDate: finalExpiryDate,
-        },
-      };
-    } catch (error) {
-      console.error("Error storing user tokens:", error);
-      throw new Error(`Failed to store user tokens: ${error.message}`);
-    }
+ async storeUserInfo(
+  pijulUsername,
+  {
+    userToken = null,
+    gitRefreshToken = null,
+    installationId = null,
+    expiryDate = null,
+    githubUsername = null,
+    connectionType = 'user'
   },
-  // Retrieve and decrypt user token
-  async retrieveUserToken(username) {
-    try {
-      const result = await pool.query(
-        `
-      SELECT git_enc_token, git_refresh_token, expired_at
-      FROM user_tokens 
-      WHERE username = $1 AND expired_at > NOW()
-    `,
-        [username],
-      );
+) {
+  try {
+    // Encrypt tokens only if they are provided
+    const encryptedUserToken = userToken ? this.encryptToken(userToken) : null;
+    const encryptedRefreshToken = gitRefreshToken
+      ? this.encryptToken(gitRefreshToken)
+      : null;
 
-      if (result.rows.length === 0) {
-        return null;
-      }
+    // Check if user exists
+    const userResult = await pool.query(
+      `SELECT id FROM users WHERE username = $1`,
+      [pijulUsername],
+    );
 
-      const tokens = result.rows[0];
-
-      return {
-        userToken: tokens.git_enc_token
-          ? this.decryptToken(tokens.git_enc_token)
-          : null,
-        refreshToken: tokens.git_refresh_token
-          ? this.decryptToken(tokens.git_refresh_token)
-          : null,
-        expiredAt: tokens.expired_at,
-      };
-    } catch (error) {
-      console.error("Error retrieving user token:", error);
-      throw new Error(`Failed to retrieve user token: ${error.message}`);
+    if (userResult.rows.length === 0) {
+      throw new Error(`User ${pijulUsername} not found`);
     }
-  },
 
-  // Retrieve installation ID
-  async retrieveInstallationId(username) {
-    try {
-      const result = await pool.query(
-        `
-      SELECT installation_id FROM user_tokens WHERE username = $1
-    `,
-        [username],
-      );
+    const userId = userResult.rows[0].id;
 
-      if (result.rows.length === 0 || !result.rows[0].installation_id) {
-        return null;
-      }
+    // Use provided expiry date or calculate default (30 days from now)
+    const finalExpiryDate = expiryDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-      return result.rows[0].installation_id;
-    } catch (error) {
-      console.error("Error retrieving installation ID:", error);
-      throw new Error(`Failed to retrieve installation ID: ${error.message}`);
+    // Insert or update - matching your git_info table schema
+    await pool.query(
+      `
+      INSERT INTO git_info (
+        user_id, 
+        provider, 
+        provider_username, 
+        access_token, 
+        refresh_token, 
+        installation_id, 
+        token_expires_at,
+        connection_type
+      )
+      VALUES ($1, 'github', $2, $3, $4, $5, $6,$7,$8)
+      ON CONFLICT (user_id, provider) DO UPDATE SET
+      provider_username = COALESCE($2, git_info.provider_username),
+      access_token = COALESCE($3, git_info.access_token),
+      refresh_token = COALESCE($4, git_info.refresh_token),
+      installation_id = COALESCE($5, git_info.installation_id),
+      token_expires_at = COALESCE($6, git_info.token_expires_at)
+      username = COALESCE($7, git_info.username),
+      connection_type = COALESCE($8, git_info.connection_type)
+      `,
+      [
+        userId,
+        githubUsername || pijulUsername,
+        encryptedUserToken,
+        encryptedRefreshToken,
+        installationId,
+        finalExpiryDate,
+        pijulUsername,
+        connectionType
+      ],
+    );
+
+    return {
+      success: true,
+      message: "Tokens stored successfully",
+      stored: {
+        userToken: !!userToken,
+        refreshToken: !!gitRefreshToken,
+        installationId: !!installationId,
+        expiryDate: finalExpiryDate,
+        githubUsername: githubUsername || pijulUsername
+      },
+    };
+  } catch (error) {
+    console.error("Error storing user tokens:", error);
+    throw new Error(`Failed to store user tokens: ${error.message}`);
+  }
+},
+  async  retrievegithubUsername(pijulUsername) {
+  try {
+    const result = await pool.query(
+      `
+      SELECT provider_username 
+      FROM git_info gi
+      INNER JOIN users u ON gi.user_id = u.id
+      WHERE u.username = $1 
+        AND gi.provider = 'github'
+      `,
+      [pijulUsername],
+    );
+
+    if (result.rows.length === 0) {
+      return null;
     }
-  },
 
+    return result.rows[0].provider_username;
+  } catch (error) {
+    console.error("Error retrieving GitHub username:", error);
+    throw new Error(`Failed to retrieve GitHub username: ${error.message}`);
+  }
+},
+  async  retrievepijulUsername(githubUsername) {
+  try {
+    const result = await pool.query(
+      `
+      SELECT u.username 
+      FROM git_info gi
+      INNER JOIN users u ON gi.user_id = u.id
+      WHERE gi.provider_username = $1 
+        AND gi.provider = 'github'
+      `,
+      [githubUsername],
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return result.rows[0].username;
+  } catch (error) {
+    console.error("Error retrieving pijul username:", error);
+    throw new Error(`Failed to retrieve pijul username: ${error.message}`);
+  }
+},
+ async  getGithubRepoInfo({pijulUsername=null,githubUsername=null, pijulRepoName}) {
+  try {
+    if(!pijulRepoName && !githubUsername){
+      throw new Error("At least one of pijulRepoName or githubUsername must be provided");
+    } 
+     githubUsername =githubUsername?githubUsername : await this.retrievegithubUsername(pijulUsername);
+     pijulUsername = pijulUsername? pijulUsername : await this.retrievepijulUsername(githubUsername);     
+    const result = await pool.query(
+      `
+      SELECT github_repo_name 
+      FROM repositories 
+      WHERE owner = $1 AND name = $2
+      `,
+      [pijulUsername, pijulRepoName],
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return { 
+      githubRepoName: result.rows[0].github_repo_name, 
+      githubUsername 
+    };
+  } catch (error) {
+    console.error("Error retrieving repo info:", error);
+    throw new Error(`Failed to retrieve repo info: ${error.message}`);
+  }
+},
+async getPijulRepoInfo({githubUsername=null,pijulUsername=null, githubReponame}) {
+  try {
+    if(!githubReponame && !pijulUsername){
+      throw new Error("At least one of githubReponame or pijulUsername must be provided");
+    }
+    const pijulUsername = pijulUsername || await this.retrievepijulUsername(githubUsername);
+    
+    if (!pijulUsername) {
+      return null;
+    }
+    
+    const result = await pool.query(
+      `
+      SELECT name, id 
+      FROM repositories 
+      WHERE owner = $1 AND github_repo_name = $2
+      `,
+      [pijulUsername, githubReponame],
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return { 
+      name: result.rows[0].name, 
+      owner: pijulUsername, 
+      repoId: result.rows[0].id 
+    };
+  } catch (error) {
+    console.error("Error retrieving pijul repo info:", error);
+    throw new Error(`Failed to retrieve pijul repo info: ${error.message}`);
+  }
+},
+
+// Retrieve and decrypt user token
+async retrieveUserToken({pijulUsername=null,githubUsername=null}) {
+  try {
+    if(!pijulUsername && !githubUsername){
+      throw new Error("At least one of pijulUsername or githubUsername must be provided");
+    }
+    
+    const result =pijulUsername? await pool.query(
+      `
+      SELECT gi.access_token, gi.refresh_token, gi.token_expires_at
+      FROM git_info gi
+      INNER JOIN users u ON gi.user_id = u.id
+      WHERE u.username = $1 
+        AND gi.provider = 'github'
+        AND gi.token_expires_at > NOW()
+      `,
+      [pijulUsername],
+    ) : await pool.query(
+      `
+      SELECT gi.access_token, gi.refresh_token, gi.token_expires_at
+      FROM git_info gi
+      INNER JOIN users u ON gi.user_id = u.id
+      WHERE u.provider_username = $1 
+        AND gi.provider = 'github'
+        AND gi.token_expires_at > NOW()
+      `,
+      [githubUsername],
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const tokens = result.rows[0];
+
+    return {
+      userToken: tokens.access_token
+        ? this.decryptToken(tokens.access_token)
+        : null,
+      refreshToken: tokens.refresh_token
+        ? this.decryptToken(tokens.refresh_token)
+        : null,
+      expiredAt: tokens.token_expires_at,
+    };
+  } catch (error) {
+    console.error("Error retrieving user token:", error);
+    throw new Error(`Failed to retrieve user token: ${error.message}`);
+  }
+},
+
+// Retrieve installation ID
+async retrieveInstallationId({pijulUsername=null,githubUsername=null}) {
+
+  try {
+    if(!pijulUsername && !githubUsername){
+      throw new Error("At least one of pijulUsername or githubUsername must be provided");
+    }
+    const result = await pool.query(
+      `
+      SELECT gi.installation_id 
+      FROM git_info gi
+      INNER JOIN users u ON gi.user_id = u.id
+      WHERE (u.username = $1 OR u.provider_username = $2)
+        AND gi.provider = 'github'
+      `,
+      [pijulUsername ,githubUsername],
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].installation_id) {
+      return null;
+    }
+
+    return result.rows[0].installation_id;
+  } catch (error) {
+    console.error("Error retrieving installation ID:", error);
+    throw new Error(`Failed to retrieve installation ID: ${error.message}`);
+  }
+},
   // Get authenticated Octokit instance for user
-  async getUserOctokit(username) {
+  async getUserOctokit({pijulUsername=null,githubUsername=null}) {
     const { userToken, refreshToken, expiredAt } =
-      await this.retrieveUserToken(username);
+      await this.retrieveUserToken({pijulUsername, githubUsername});
 
     const octokit = ghApp.oauth.getUserOctokit({
        token: userToken,
@@ -172,28 +325,27 @@ const gitStore = {
     octokit.hook.on("auth-refresh", async (options) => {
      try {
     // Extract the newly generated tokens and their expiration date directly from the event payload
-    const { token, refreshToken, expiresAt } = newAuthData;
-
-    console.log(`🔄 Tokens automatically refreshed for user: ${username}`);
+    const { token, refreshToken, expiresAt } = options;   
+    console.log(`🔄 Tokens automatically refreshed for user: ${pijulUsername}`);
 
     // Update your database immediately with the newly rotated values
-    await this.storeUserToken(username, {
+    await this.storeUserInfo(pijulUsername||await this.retrievePijulUsername(githubUsername), {
       userToken: token,
       refreshToken: refreshToken,
       expiredAt: expiresAt, // Stores the updated ISO string/date timestamp
     });
     
   } catch (error) {
-    console.error(`❌ Failed to commit freshly rotated tokens to the database for ${username}:`, error);
+    console.error(`❌ Failed to commit freshly rotated tokens to the database for ${pijulUsername}:`, error);
   }
 
     });
 
     return octokit;
   },
-  async getActiveUserToken(username) {
+  async getActiveUserToken({pijulUsername=null,githubUsername=null}) {
     // 1. Get the self-refreshing Octokit instance
-    const octokit = await this.getUserOctokit(username);
+    const octokit = await this.getUserOctokit({pijulUsername, githubUsername});
 
     // 2. Extract the current state. If the token is already expired,
     const authData = await octokit.auth();
@@ -217,11 +369,23 @@ const gitStore = {
   
   return installationOctokit;
 },
+async getAppOctokitbyUsername({pijulUsername=null,githubUsername=null}){
+  const installationId = await this.retrieveInstallationId({pijulUsername, githubUsername});
+  if(!installationId){
+    throw new Error("No installation ID found for user");
+  }
+  const installationOctokit = await this.getAppOctokit(installationId);
+  return installationOctokit;
+}
+,
 
   // Create repository (public or private)
-  async createRepo(username, repoName, description = "", isPrivate = true) {
+  async createRepo({pijulUsername=null,githubUsername=null, repoName, description = "", isPrivate = true}) {
     try {
-      const octokit = await this.getUserOctokit(username);
+      if(!pijulUsername && !githubUsername){
+        throw new Error("At least one of pijulUsername or githubUsername must be provided");
+      }
+      const octokit = await this.getUserOctokit({pijulUsername, githubUsername});
 
       const response = await octokit.request("POST /user/repos", {
         name: repoName,
@@ -247,32 +411,36 @@ const gitStore = {
   },
 
   // Push to repository from local folder with authentication
-  async pushToRepo(username,repoName, {contributorUsername, localFolderPath, commitMessage = "Initial commit", branch = "main"}) {
+  async pushToRepo({pijulUsername=null,githubUsername=null, githubRepoName, contributorPijulUsername=null,contributorGithubUsername=null,  gitRepoLocalPath, commitMessage = "Initial commit", branch = "main"}) {
     try {
-      const octokit = await this.getUserOctokit(username);
-      const octokitforcontributor=contributorUsername?await this.getUserOctokit(contributorUsername):octokit;
+      if(!pijulUsername && !githubUsername){
+        throw new Error("At least one of pijulUsername or githubUsername must be provided");
+      }
+
+      const octokit = await this.getUserOctokit({pijulUsername, githubUsername});
+      const octokitforcontributor=contributorPijulUsername||contributorGithubUsername?await this.getUserOctokit({pijulUsername: contributorPijulUsername, githubUsername: contributorGithubUsername}):octokit;
       const userInfo = await octokitforcontributor.request("GET /user");
       const userToken = await this.getActiveUserTokenbyoctKit(octokit);
-
+       githubUsername = githubUsername?githubUsername:await this.retrievegithubUsername(pijulUsername);
       // Get user info for git config
 
       // Create authenticated URL for push
-      const authenticatedUrl = `https://${username}:${userToken}@github.com/${username}/${repoName}.git`;
+      const authenticatedUrl = `https://${githubUsername}:${userToken}@github.com/${githubUsername}/${githubRepoName}.git`;
 
       // Initialize simple-git
-      const git = simpleGit(localFolderPath);
+      const git = simpleGit(gitRepoLocalPath);
 
       // Check if .git exists, if not initialize
-      const gitPath = path.join(localFolderPath, ".git");
+      const gitPath = path.join(gitRepoLocalPath, ".git");
       if (!fs.existsSync(gitPath)) {
         await git.init();
       }
 
       // Set git user config
-      await git.addConfig("user.name", userInfo.data.name || username);
+      await git.addConfig("user.name", userInfo.data.name || githubUsername);
       await git.addConfig(
         "user.email",
-        userInfo.data.email || `${username}@users.noreply.github.com`,
+        userInfo.data.email || `${githubUsername}@users.noreply.github.com`,
       );
 
       // Check if remote origin exists
@@ -308,7 +476,7 @@ const gitStore = {
       return {
         success: true,
         message: "Successfully pushed to repository",
-        repoUrl: `https://github.com/${username}/${repoName}`,
+        repoUrl: `https://github.com/${githubUsername}/${githubRepoName}`,
       };
     } catch (error) {
       console.error("Error pushing to repository:", error);
@@ -317,25 +485,25 @@ const gitStore = {
   },
 
   // Pull from repository to local folder with authentication
-  async pullFromRepo(username, repoName, localFolderPath, branch = "main") {
+  async pullFromRepo({pijulUsername,githubUsername, githubRepoName,  localGitPath, branch = "main"}) {
     try {
-      const userToken = await this.getActiveUserToken(username);
-
+      const userToken = await this.getActiveUserToken({pijulUsername,githubUsername});
+      const githubUsername=githubUsername?githubUsername:await this.retrievegithubUsername(pijulUsername);
       // Create authenticated URL for clone/pull
-      const authenticatedUrl = `https://${username}:${userToken}@github.com/${username}/${repoName}.git`;
+      const authenticatedUrl = `https://${githubUsername}:${userToken}@github.com/${githubUsername}/${githubRepoName}.git`;
 
       // Ensure directory exists
-      await fs.ensureDir(localFolderPath);
+      await fs.ensureDir(localGitPath);
 
-      const git = simpleGit(localFolderPath);
-      const gitPath = path.join(localFolderPath, ".git");
+      const git = simpleGit(localGitPath);
+      const gitPath = path.join(localGitPath, ".git");
 
       // Check if the folder is already a git repository
       const isRepo = fs.existsSync(gitPath);
 
       if (!isRepo) {
         // Clone the repository with authentication
-        await git.clone(authenticatedUrl, localFolderPath, [
+        await git.clone(authenticatedUrl, localGitPath, [
           "--branch",
           branch,
         ]);
@@ -360,26 +528,53 @@ const gitStore = {
       return {
         success: true,
         message: "Successfully pulled from repository",
-        localPath: localFolderPath,
+        localPath: localGitPath,
       };
     } catch (error) {
       console.error("Error pulling from repository:", error);
       throw new Error(`Failed to pull from repository: ${error.message}`);
     }
   },
+async gitLatestCommitInfo(gitLocalPath) {
+  try {
+    const simpleGit = require('simple-git');
+    const git = simpleGit(gitLocalPath);
+    
+    const log = await git.log({ maxCount: 1 });
+    
+    if (log.latest) {
+      return {
+        commitHash: log.latest.hash,
+        commitAuthor: log.latest.author_name,
+        commitMessage: log.latest.message,
+        commitTimestamp: log.latest.date
+      };
+    }
+    
+    return null;
+    
+  } catch (error) {
+    console.error('Error getting latest commit info:', error);
+    throw new Error(`Failed to get latest commit info: ${error.message}`);
+  }
+},
 
   // Push tag to repository with authentication
-  async pushTag(username,repoName, { tagName,tagMessage = "",  localFolderPath = null} ) {
+  async pushTag({pijulUsername,githubUsername, githubRepoName,  tagName,tagMessage = "",   localGitPath = null} ) {
     try {
-      const userToken = await this.getActiveUserToken(username);
-      const authenticatedUrl = `https://${username}:${userToken}@github.com/${username}/${repoName}.git`;
+      if(!pijulUsername && !githubUsername){
+        throw new Error("At least one of pijulUsername or githubUsername must be provided");
+      }
+      githubUsername = githubUsername?githubUsername:await this.retrieveGithubUsername(pijulUsername);
+      const userToken = await this.getActiveUserToken({pijulUsername,githubUsername});
+      const authenticatedUrl = `https://${githubUsername}:${userToken}@github.com/${githubUsername}/${githubRepoName}.git`;
 
       let git;
       let tempDir = null;
 
-      if (localFolderPath && fs.existsSync(localFolderPath)) {
+      if (localGitPath && fs.existsSync(localGitPath)) {
         // Use existing local folder
-        git = simpleGit(localFolderPath);
+        git = simpleGit(localGitPath);
 
         // Update remote URL with authentication
         try {
@@ -393,7 +588,7 @@ const gitStore = {
         await git.addRemote("origin", authenticatedUrl);
       } else {
         // Create temporary directory for tag operations
-        tempDir = path.join(process.cwd(), "temp", `${repoName}-${Date.now()}`);
+        tempDir = path.join(process.cwd(), "temp", `${githubRepoName}-${Date.now()}`);
         await fs.ensureDir(tempDir);
 
         git = simpleGit(tempDir);
@@ -419,7 +614,7 @@ const gitStore = {
       return {
         success: true,
         message: `Tag '${tagName}' pushed successfully`,
-        tagUrl: `https://github.com/${username}/${repoName}/releases/tag/${tagName}`,
+        tagUrl: `https://github.com/${githubUsername}/${githubRepoName}/releases/tag/${tagName}`,
       };
     } catch (error) {
       console.error("Error pushing tag:", error);
@@ -428,15 +623,15 @@ const gitStore = {
   },
 
   // Alternative: Push tag using Octokit API (no local repo needed)
-  async pushTagViaAPI(username, repoName, tagName, commitSha, tagMessage = "") {
+  async pushTagViaAPI({pijulUsername,githubUsername, githubRepoName, tagName, commitSha, tagMessage = ""}) {
     try {
-      const octokit = await this.getUserOctokit(username);
-
+      const octokit = await this.getUserOctokit({pijulUsername,githubUsername});
+      const githubUsername = githubUsername?githubUsername:await this.retrievegithubUsername(pijulUsername);
       // First, verify user has access to the repo
       try {
         await octokit.request("GET /repos/{owner}/{repo}", {
-          owner: username,
-          repo: repoName,
+          owner: githubUsername,
+          repo: githubRepoName,
         });
       } catch (error) {
         throw new Error(`Cannot access repository: ${error.message}`);
@@ -446,8 +641,8 @@ const gitStore = {
       const tagResponse = await octokit.request(
         "POST /repos/{owner}/{repo}/git/tags",
         {
-          owner: username,
-          repo: repoName,
+          owner: githubUsername,
+          repo: githubRepoName,
           tag: tagName,
           message: tagMessage || `Release ${tagName}`,
           object: commitSha,
@@ -460,8 +655,8 @@ const gitStore = {
 
       // Create reference (tag)
       await octokit.request("POST /repos/{owner}/{repo}/git/refs", {
-        owner: username,
-        repo: repoName,
+        owner: githubUsername,
+        repo: githubRepoName,
         ref: `refs/tags/${tagName}`,
         sha: tagResponse.data.sha,
         headers: {
@@ -472,7 +667,7 @@ const gitStore = {
       return {
         success: true,
         message: `Tag '${tagName}' created and pushed successfully via API`,
-        tagUrl: `https://github.com/${username}/${repoName}/releases/tag/${tagName}`,
+        tagUrl: `https://github.com/${githubUsername}/${githubRepoName}/releases/tag/${tagName}`,
       };
     } catch (error) {
       console.error("Error pushing tag via API:", error);
@@ -481,9 +676,10 @@ const gitStore = {
   },
 
   // Get user's repositories (including private)
-  async getUserRepos(username) {
+  async getUserRepos({pijulUsername=null,githubUsername=null}) {
     try {
-      const octokit = await this.getUserOctokit(username);
+      const octokit = await this.getUserOctokit({pijulUsername,githubUsername});
+      const githubUsername = githubUsername?githubUsername:await this.retrieveGithubUsername(pijulUsername);
 
       const response = await octokit.request("GET /user/repos", {
         visibility: "all",
@@ -510,13 +706,14 @@ const gitStore = {
   },
 
   // Helper method to check if user has access to a repo
-  async checkRepoAccess(username, repoName) {
+  async checkRepoAccess({pijulUsername=null,githubUsername=null, repoName}) {
 
     try {
-      const octokit = await this.getUserOctokit(username);
+      const octokit = await this.getUserOctokit({pijulUsername,githubUsername});
+      const githubUsername = githubUsername?githubUsername:await this.retrieveGithubUsername(pijulUsername);
 
       await octokit.request("GET /repos/{owner}/{repo}", {
-        owner: username,
+        owner: githubUsername,
         repo: repoName,
       });
 
@@ -541,4 +738,4 @@ const gitStore = {
   },
 };
 
-module.exports = { gitStore, encryptToken, decryptToken };
+module.exports = { gitStore, encryptedToken:gitStore.encryptToken ,decryptToken:gitStore.decryptToken };    // ------ exports encryptToken and decryptToken as top-level names, but they're only methods on gitStore, so those exports will be undefined ------ guys

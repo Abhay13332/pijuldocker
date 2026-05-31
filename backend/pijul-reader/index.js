@@ -579,8 +579,16 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { getChangeDetails, getFileContent, getMergeConflicts, getRepositoryFiles } = nativeBinding
+const { createPatchSession, dropSession, getChangeDetails, getChannelPatchDiff, getFileContent, getLatestPatches, getMergeConflicts, getPatchDependencyGraph, getRepositoryFiles, getSessionFileContent, getSessionRecursiveTree, listSessionDirectory } = nativeBinding
+export { createPatchSession }
+export { dropSession }
 export { getChangeDetails }
+export { getChannelPatchDiff }
 export { getFileContent }
+export { getLatestPatches }
 export { getMergeConflicts }
+export { getPatchDependencyGraph }
 export { getRepositoryFiles }
+export { getSessionFileContent }
+export { getSessionRecursiveTree }
+export { listSessionDirectory }
